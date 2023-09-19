@@ -114,8 +114,8 @@ const hourGapPx = 75
 const initialOffsetPx = 100
 const lineOverlap = 30
 
-const minBooking = Temporal.Duration.from({hours: 0, minutes: 30})
-const increment = Temporal.Duration.from({hours: 0, minutes: 15})
+const minBooking = Temporal.Duration.from({hours: 0, minutes: 60})
+const increment = Temporal.Duration.from({hours: 0, minutes: 30})
 
 function getTimeOffsetPx(time: Temporal.PlainTime): number {
   return hourGapPx * ((time.hour - startTime.value.hour) + (time.minute - startTime.value.minute) / 60) + initialOffsetPx
@@ -137,7 +137,6 @@ const totalHeight = computed<number>(() => getTimeOffsetPx(endTime.value))
 
 function mouseDown(day: Temporal.PlainDate, e: MouseEvent) {
   let t = getTimeFromOffsetY(e.offsetY)
-  console.log("hi")
   if (Temporal.Duration.compare(t.until(endTime.value), minBooking) >= 0 && Temporal.PlainTime.compare(t, startTime.value) >= 0) {
     tempBookingState.value = 1
     tempBooking.value.startTime = getTimeFromOffsetY(e.offsetY)
