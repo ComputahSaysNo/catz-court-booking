@@ -12,6 +12,11 @@ npm run dev
 Backend using Django
 ```sh
 cd backend
+python3 -m venv env
+env/Scripts/activate 
+pip install -r requirements.txt
+manage.py makemigrations
+manage.py migrate
 manage.py runserver
 ```
 
