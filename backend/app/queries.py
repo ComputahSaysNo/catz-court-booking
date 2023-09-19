@@ -9,6 +9,7 @@ class Query(graphene.ObjectType):
     all_bookings = graphene.List(types.BookingType)
     bookings_by_court = graphene.List(types.BookingType, court_id=graphene.ID())
     bookings_by_user = graphene.List(types.BookingType, user_id=graphene.ID())
+    session_info = graphene.Field(types.SessionInfoType)
 
     def resolve_site(self, info):
         return (
@@ -35,3 +36,13 @@ class Query(graphene.ObjectType):
             models.Booking.objects.filter(user__pk=user_id)
         )
 
+    def resolve_session_info(self, info):
+        user = info.context.user
+        s = types.SessionInfoType()
+        if user.is_authenticated:
+            s.user = user
+            s.is_authenticated = True
+        else:
+            s.is_authenticated = False
+            s.user = None
+        return s
