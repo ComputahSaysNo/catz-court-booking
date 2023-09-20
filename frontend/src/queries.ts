@@ -42,3 +42,17 @@ export const ALL_COURTS = gql`
     }
 `
 
+
+export const SESSION_INFO = gql `
+    query {
+        sessionInfo {
+            isAuthenticated
+            user {
+                id
+                firstName
+                lastName
+                email
+            }
+        }
+    }
+`

@@ -12,7 +12,7 @@ const today = Temporal.Now.plainDateISO()
 
 const q1 = useQuery(ALL_COURTS).result
 const allCourts = computed<any[]>(() => q1.value?.allCourts ?? [])
-const activeCourtId = ref<number>()
+const activeCourtId = ref<number>(1)
 const activeCourt = computed(() => {
   if (allCourts) {
     return allCourts.value.find(obj => obj.id === activeCourtId.value)

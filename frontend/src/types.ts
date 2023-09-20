@@ -15,4 +15,11 @@ interface Booking {
     user: number
 }
 
-export type {Court, Booking}
+interface User {
+    id: number
+    firstName: string
+    lastName: string
+    email: string
+}
+
+export type {Court, Booking, User}
