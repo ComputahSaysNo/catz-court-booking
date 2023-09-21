@@ -8,12 +8,6 @@ import {computed, onMounted, ref, watch} from "vue";
 import {useQuery} from "@vue/apollo-composable";
 import {SESSION_INFO} from "@/queries";
 
-import {useUserStore} from "@/stores/user";
-const userStore = useUserStore()
-const q = useQuery(SESSION_INFO).result
-
-const e = computed(()=>q.value?.data || null)
-
 
 </script>
 

@@ -25,4 +25,5 @@ urlpatterns = [
     path("graphql", csrf_exempt(GraphQLView.as_view(graphiql=True))),
     path('login-complete/google-oauth2/', views.user_token),
     path('accounts/', include('social_django.urls', namespace='social')),
+    path('accounts/', include('django.contrib.auth.urls')),
 ]

@@ -255,7 +255,7 @@ function clearBooking() {
                 <p class="fw-bold">{{ getTimeString(booking.startTime, display24hr) }} -
                   {{ getTimeString(booking.endTime, display24hr) }}</p>
                 <p class="fst-italic">{{ booking.description }}</p>
-                <p>{{ `${booking.user.firstName} ${booking.user.lastName} (${booking.user.email})` }}</p>
+                <p>{{ `${booking.user.firstName} ${booking.user.lastName} ${booking.user.email}` }}</p>
               </div>
             </div>
           </div>
