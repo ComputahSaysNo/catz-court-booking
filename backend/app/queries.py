@@ -39,10 +39,6 @@ class Query(graphene.ObjectType):
     def resolve_session_info(self, info):
         user = info.context.user
         s = types.SessionInfoType()
-        if user.is_authenticated:
-            s.user = user
-            s.is_authenticated = True
-        else:
-            s.is_authenticated = False
-            s.user = None
+        s.is_authenticated = user.is_authenticated
+        s.user = user if user.is_authenticated else None
         return s

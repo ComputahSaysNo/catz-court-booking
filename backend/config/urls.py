@@ -23,7 +23,6 @@ from app import views
 urlpatterns = [
     path('admin/', admin.site.urls),
     path("graphql", csrf_exempt(GraphQLView.as_view(graphiql=True))),
-    path('accounts/', include('django.contrib.auth.urls')),
     path('login-complete/google-oauth2/', views.user_token),
     path('accounts/', include('social_django.urls', namespace='social')),
 ]

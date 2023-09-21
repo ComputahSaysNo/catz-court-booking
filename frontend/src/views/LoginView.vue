@@ -2,16 +2,20 @@
 import {useRoute, useRouter} from "vue-router"
 
 import {useUserStore} from "../stores/user";
+import {useTokenStore} from "../stores/token";
 
 const route = useRoute()
 const router = useRouter()
-const token = route.query.token
+const token = route.query.token.toString()
 const err = route.query.error
 
+const tokenStore = useTokenStore()
 const userStore = useUserStore()
 
 if (token) {
-  userStore.loginWithToken(token.toString())
+  console.log(token)
+  tokenStore.token = token
+  // userStore.completeLogin()
   router.push('/')
 }
 
