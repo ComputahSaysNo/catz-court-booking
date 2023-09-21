@@ -12,15 +12,8 @@ import {useUserStore} from "@/stores/user";
 
 const userStore = useUserStore()
 
-const q = useQuery(SESSION_INFO, null, {fetchPolicy: 'no-cache'}).onResult
+const q = useQuery(SESSION_INFO, null, {fetchPolicy: 'no-cache'}).result
 
-q((queryResult)=>{
-  const d = queryResult.data
-  if (d !== undefined) {
-    userStore.isAuthenticated = d.isAuthenticated
-    userStore.user = d.user
-  }
-})
 
 
 </script>
