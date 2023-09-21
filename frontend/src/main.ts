@@ -35,7 +35,7 @@ const cache = new InMemoryCache()
 const authMiddleware = new ApolloLink((operation, forward) => {
     operation.setContext(({headers = {}}) => ({
         headers: {
-            authorization: userStore.token
+            authorization: `Token ${userStore.token}`
         }
     }))
     return forward(operation)

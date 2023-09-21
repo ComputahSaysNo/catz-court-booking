@@ -162,8 +162,17 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'mediafiles')
 MEDIA_URL = '/media/'
 
 GRAPHENE = {
-    "SCHEMA": "app.schema.schema"
+    "SCHEMA": "app.schema.schema",
+    "MIDDLEWARE": ("app.middleware.DRFAuthorizationMiddleware",)
 }
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ]
+}
+
 
 CORS_ORIGIN_ALLOW_ALL = False
 CORS_ORIGIN_WHITELIST = ("http://localhost:5173",)
