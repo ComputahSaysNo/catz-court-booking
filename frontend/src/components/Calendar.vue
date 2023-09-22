@@ -102,24 +102,17 @@ const tempBookingState = ref(0)
 watch(activeCourtId, () => {
   newBooking.reset()
   newBooking.courtId = activeCourtId.value
-  tempBooking.value = {
-    startTime: new Temporal.PlainTime(10, 0),
-    endTime: new Temporal.PlainTime(12, 0),
-    date: today,
-    court: activeCourtId.value
-  }
-  tempBookingState.value = 0
 })
 
-const tempBookingEndLimit = computed<Temporal.PlainTime>(() => {
-  if (tempBookingState.value === 0) {
+const newBookingEndLimit = computed<Temporal.PlainTime>(() => {
+  if (newBooking.state === 'idle') {
     return endTime.value
   } else {
     let earliestLimit = endTime.value
     for (let booking of displayedBookings.value) {
       const bookingStartTime = Temporal.PlainTime.from(booking.startTime)
-      if (booking.date === tempBooking.value.date.toString()) {
-        if (Temporal.PlainTime.compare(bookingStartTime, tempBooking.value.startTime) > 0) {
+      if (booking.date === newBooking.date?.toString()) {
+        if (Temporal.PlainTime.compare(bookingStartTime, newBooking.startTime!) > 0) {
           if (Temporal.PlainTime.compare(bookingStartTime, earliestLimit) < 0) {
             earliestLimit = Temporal.PlainTime.from(booking.startTime)
           }
@@ -163,66 +156,55 @@ const totalHeight = computed<number>(() => getTimeOffsetPx(endTime.value))
 
 function mouseDown(day: Temporal.PlainDate, e: MouseEvent) {
   let t = getTimeFromOffsetY(e.offsetY)
-  tempBookingState.value = 1
-  tempBooking.value.startTime = getTimeFromOffsetY(e.offsetY)
-  tempBooking.value.endTime = getTimeFromOffsetY(e.offsetY + (minBooking.minutes / 60) * hourGapPx)
-  tempBooking.value.date = day
+  newBooking.state = "mouse-down"
+  newBooking.startTime = getTimeFromOffsetY(e.offsetY)
+  newBooking.endTime = getTimeFromOffsetY(e.offsetY + (minBooking.minutes / 60) * hourGapPx)
+  newBooking.date = day
   for (let booking of displayedBookings.value) {
     if (booking.date === day.toString()) {
-      if (Temporal.PlainTime.compare(Temporal.PlainTime.from(booking.startTime), tempBooking.value.startTime) <= 0 && Temporal.PlainTime.compare(Temporal.PlainTime.from(booking.endTime), tempBooking.value.startTime) > 0) {
-        tempBookingState.value = 0
+      if (Temporal.PlainTime.compare(Temporal.PlainTime.from(booking.startTime), newBooking.startTime) <= 0 && Temporal.PlainTime.compare(Temporal.PlainTime.from(booking.endTime), newBooking.startTime) > 0) {
+        newBooking.reset()
         return
       }
     }
   }
-  if (Temporal.Duration.compare(t.until(tempBookingEndLimit.value), minBooking) < 0 || Temporal.PlainTime.compare(t, startTime.value) < 0) {
-    tempBookingState.value = 0
+  if (Temporal.Duration.compare(t.until(newBookingEndLimit.value), minBooking) < 0 || Temporal.PlainTime.compare(t, startTime.value) < 0) {
+    newBooking.reset()
     return
-
   }
 }
 
 function mouseUp(day: Temporal.PlainDate, e: MouseEvent) {
-  if (tempBookingState.value === 1) {
-    tempBookingState.value = 2
+  if (newBooking.state === "mouse-down") {
+    newBooking.state = "in-form"
     modalOpen.value = true
   }
 }
 
 function mouseMove(day: Temporal.PlainDate, e: MouseEvent) {
-  if (tempBookingState.value === 1) {
+  if (newBooking.state === "mouse-down") {
     let newEnd = getTimeFromOffsetY(e.offsetY)
 
-    if (Temporal.Duration.compare(tempBooking.value.startTime.until(newEnd), minBooking) >= 0) {
+    if (Temporal.Duration.compare(newBooking.startTime!.until(newEnd), minBooking) >= 0) {
 
-      if (Temporal.PlainTime.compare(tempBookingEndLimit.value, newEnd) >= 0) {
-        tempBooking.value.endTime = newEnd
+      if (Temporal.PlainTime.compare(newBookingEndLimit.value, newEnd) >= 0) {
+        newBooking.endTime = newEnd
       } else {
-        tempBooking.value.endTime = tempBookingEndLimit.value
+        newBooking.endTime = newBookingEndLimit.value
       }
     }
   }
 }
 
-function mouseOut(day: Temporal.PlainDate, e: MouseEvent) {
-  if (tempBookingState.value === 1) {
-    tempBookingState.value = 0
-  }
-}
-
 const modalOpen = ref(false)
 
-function clearBooking() {
-  tempBookingState.value = 0
-  modalOpen.value = false
-}
 
 </script>
 
 <template>
-  <div class="wrapper bg-white py-5 m-4 card" @mouseleave="tempBookingState=0"  @keydown.esc="tempBookingState=0" tabindex="0" >
+  <div class="wrapper mt-4 container-fluid bg-white py-5 card"  @keydown.esc="newBooking.reset()" tabindex="0" >
     <!-- actions bar -->
-    <div class="container-xxl card bg-light border-2 p-2" style="position: sticky; top: 50px; z-index: 50">
+    <div class="controls container-xxl card bg-light border-2 p-2">
       <div class="row justify-content-end">
         <div class="col-4 my-auto">
           <div class="row">
@@ -262,7 +244,7 @@ function clearBooking() {
 
         </div>
         <div class="col-4 my-auto">
-          <button v-if="userStore.isAuthenticated" class="btn btn-danger float-end" data-bs-toggle="modal"
+          <button  class="btn btn-danger float-end" data-bs-toggle="modal"
                   data-bs-target="#bookingModal">New booking
           </button>
         </div>
@@ -297,7 +279,7 @@ function clearBooking() {
                :style="{top: getTimeOffsetPx(Temporal.PlainTime.from(booking.startTime)) + 'px', height: getTimeOffsetPx(Temporal.PlainTime.from(booking.endTime)) - getTimeOffsetPx(Temporal.PlainTime.from(booking.startTime)) + 'px'}">
             <div class="booking card"
                  :class="userStore.user?.id == booking.user.id ? 'bg-success-subtle' : 'bg-dark-subtle'">
-              <div class="card-body py-1 px-1 d-flex flex-column justify-content-between"
+              <div class="card-body p-1 d-flex flex-column justify-content-between"
               >
                 <div style="font-size: 11pt">
                   <div class="mb-1">
@@ -307,7 +289,7 @@ function clearBooking() {
                     <button v-if="userStore.user?.id === booking.user.id" class="btn-close float-end"
                             style="font-size: 10pt;"></button>
                   </div>
-                  <p class="mb-2">{{ booking.description }}</p>
+                  <p class="mb-0">{{ booking.description }}</p>
                 </div>
                 <div style="font-size: 9pt; line-height: 0.9em;">
                   <p class="mb-1">{{ booking.user.firstName + " " + booking.user.lastName }} <span
@@ -320,16 +302,16 @@ function clearBooking() {
             </div>
           </div>
           <div class="booking-container px-1"
-               v-if="tempBookingState !== 0 && tempBooking.date.equals(day)"
-               :style="{top: getTimeOffsetPx(tempBooking.startTime) + 'px', height: getTimeOffsetPx(tempBooking.endTime) - getTimeOffsetPx(tempBooking.startTime) + 'px'}">
+               v-if="newBooking.state !== 'idle' && newBooking.date!.equals(day)"
+               :style="{top: getTimeOffsetPx(newBooking.startTime!) + 'px', height: getTimeOffsetPx(newBooking.endTime!) - getTimeOffsetPx(newBooking.startTime!) + 'px'}">
             <div class="tempBooking card bg-info-subtle py-0 px-1 is-bold  border-test">
               <div class="card-body p-1 d-flex flex-column justify-content-between">
-                <div class="fw-bold fs-6 text-center">{{ getTimeString(tempBooking.startTime, display24hr) }} -
-                  {{ getTimeString(tempBooking.endTime, display24hr) }}
+                <div class="fw-bold fs-6 text-center">{{ getTimeString(newBooking.startTime!, display24hr) }} -
+                  {{ getTimeString(newBooking.endTime!, display24hr) }}
                 </div>
-                <div class="align-self-center text-center font-monospace">
+                <div class="align-self-center text-center fw-bold">
                   <p class="mb-0">release to confirm</p>
-                  <p>press <span class="text-danger bg-light p-1 rounded">esc</span> to cancel</p>
+                  <p>hit <span class="text-danger bg-light p-1 rounded">esc</span> to cancel</p>
                   <i class="bi bi-arrow-down fs-3" style="line-height: 0;"></i>
                 </div>
               </div>
@@ -349,7 +331,7 @@ function clearBooking() {
         </div>
       </div>
     </div>
-    <BookingModal :new-booking="tempBooking" id="bookingModal"></BookingModal>
+    <BookingModal id="bookingModal"></BookingModal>
     <!--    <div class="modal" :class="{'is-active': modalOpen}">-->
     <!--      <div class="modal-background" style="background-color: rgba(10, 10, 10, 0.5)" @click="clearBooking"></div>-->
     <!--      <div class="modal-card booking-form">-->
@@ -466,11 +448,20 @@ function clearBooking() {
 
 .wrapper {
   user-select: none;
+  max-width: 1500px;
+  min-width: 1000px;
 }
 
 .btn-close {
   position: relative;
   z-index: 50;
+}
+
+.controls {
+  position: sticky;
+  top: 50px;
+  z-index: 50;
+  max-width: 100vw;
 }
 
 .border-test {

@@ -15,10 +15,10 @@ const userBookings = computed<Booking[]>(() => result.value?.bookingsByUser.sort
 </script>
 
 <template>
-  <div v-if="userStore.user" class="container-xxl card mt-4 bg-white p-3 rounded">
+  <div v-if="userStore.user" class="container card mt-4 bg-white p-3 rounded">
     <p class="fs-3">Hello, {{ userStore.user?.firstName }}</p>
 
-    <div v-if="userBookings.length > 0">
+    <div v-if="userBookings.length > 0" >
       <p class="fs-5">Your upcoming bookings: </p>
       <div class="d-flex flex-row flex-wrap gap-3">
         <div class="p-2 card bg-light" style="line-height: 0.5em; min-width: 200px" v-for="booking in userBookings">

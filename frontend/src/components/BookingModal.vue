@@ -2,29 +2,28 @@
 import type {Booking} from "@/types";
 import {computed, ref, watch} from "vue";
 import {Temporal} from "temporal-polyfill";
+import {useNewBookingStore} from "@/stores/newBooking";
+
+const newBooking = useNewBookingStore()
 
 const dateFormatUK = (date: Date) => {
   return `${date.getDate().toLocaleString('en-us', {minimumIntegerDigits: 2})}/${date.getMonth().toLocaleString('en-us', {minimumIntegerDigits: 2})}/${date.getFullYear()}`
 }
 
-const props = defineProps<{
-  newBooking: {
-    date: Temporal.PlainDate
-    startTime: Temporal.PlainTime
-    endTime: Temporal.PlainTime
-    court: number
+
+const dateTemp = computed({
+  get() {
+    return newBooking.date ? new Date(newBooking.date.toString()) : new Date()
+  }, set(newValue) {
+    newBooking.date = Temporal.PlainDate.from(newValue.toISOString().split("T")[0])
   }
-}>()
-
-const tempDate = ref(new Date(props.newBooking.date.toString()))
-
-watch(props.newBooking, () => tempDate.value = new Date(props.newBooking.date.toString()))
+})
 
 </script>
 
 <template>
   <div class="modal fade">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered" style="display: block">
       <div class="modal-content">
         <div class="modal-header">
           <h1 class="modal-title fs-5">Create booking</h1>
@@ -33,7 +32,7 @@ watch(props.newBooking, () => tempDate.value = new Date(props.newBooking.date.to
         <div class="modal-body">
           <form>
             <div class="form-floating">
-              <VueDatePicker v-model="tempDate" :enable-time-picker="false" :format="dateFormatUK"
+              <VueDatePicker v-model="dateTemp" :enable-time-picker="false" :format="dateFormatUK"
                              :teleport="true" auto-apply :clearable="false"></VueDatePicker>
             </div>
           </form>
