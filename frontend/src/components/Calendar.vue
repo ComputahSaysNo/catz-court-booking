@@ -7,8 +7,10 @@ import {computed, ref, watch} from "vue";
 import type {Court, Booking} from "@/types"
 import BookingModal from "@/components/BookingModal.vue"
 import {useUserStore} from "@/stores/user";
+import {useNewBookingStore} from "@/stores/newBooking";
 
 const userStore = useUserStore()
+const newBooking = useNewBookingStore()
 
 const display24hr = true
 const today = Temporal.Now.plainDateISO()
@@ -98,6 +100,8 @@ const tempBooking = ref({
 const tempBookingState = ref(0)
 
 watch(activeCourtId, () => {
+  newBooking.reset()
+  newBooking.courtId = activeCourtId.value
   tempBooking.value = {
     startTime: new Temporal.PlainTime(10, 0),
     endTime: new Temporal.PlainTime(12, 0),
@@ -325,8 +329,8 @@ function clearBooking() {
                 </div>
                 <div class="align-self-center text-center font-monospace">
                   <p class="mb-0">release to confirm</p>
-                  <p>press <span class="text-danger">esc</span> to cancel</p>
-                  <i class="bi bi-arrow-bar-down fs-3" style="line-height: 0;"></i>
+                  <p>press <span class="text-danger bg-light p-1 rounded">esc</span> to cancel</p>
+                  <i class="bi bi-arrow-down fs-3" style="line-height: 0;"></i>
                 </div>
               </div>
             </div>
