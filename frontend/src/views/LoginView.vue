@@ -20,7 +20,6 @@ const errorMessage = ref<string>("")
 
 
 if (token) {
-  console.log(token)
   tokenStore.token = token.toString()
   const {load} = useLazyQuery(SESSION_INFO)
 
@@ -47,9 +46,6 @@ if (token) {
 </script>
 
 <template>
-  <div class="container mt-5">
-    <div class="alert alert-primary"><p class="my-auto">Logging in with Raven...</p></div>
-  </div>
   <div class="container mt-3">
     <div v-if="loginError" class="alert alert-danger">There was an error, please try to log in again
       ({{ errorMessage }})

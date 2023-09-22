@@ -43,7 +43,7 @@ export const ALL_COURTS = gql`
 `
 
 
-export const SESSION_INFO = gql `
+export const SESSION_INFO = gql`
     query {
         sessionInfo {
             isAuthenticated
@@ -53,6 +53,20 @@ export const SESSION_INFO = gql `
                 lastName
                 email
             }
+        }
+    }
+`
+
+export const BOOKINGS_BY_USER = gql`
+    query ($userId: ID) {
+        bookingsByUser(userId: $userId) {
+            startTime
+            endTime
+            court {
+                id
+                name
+            }
+            date
         }
     }
 `

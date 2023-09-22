@@ -7,7 +7,7 @@ interface Court {
 
 interface Booking {
     id: number
-    court: number
+    court: Court
     date: string
     startTime: string
     endTime: string

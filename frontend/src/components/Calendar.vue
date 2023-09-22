@@ -6,12 +6,15 @@ import {getMonday, getWeek, isToday, getTimeString} from "@/utils/datetime";
 import {computed, ref, watch} from "vue";
 import type {Court, Booking} from "@/types"
 import BookingModal from "@/components/BookingModal.vue"
+import {useUserStore} from "@/stores/user";
+
+const userStore = useUserStore()
 
 const display24hr = true
 const today = Temporal.Now.plainDateISO()
 
 const q1 = useQuery(ALL_COURTS).result
-const allCourts = computed<any[]>(() => q1.value?.allCourts ?? [])
+const allCourts = computed<Court[]>(() => q1.value?.allCourts ?? [])
 const activeCourtId = ref<number>(1)
 const activeCourt = computed(() => {
   if (allCourts) {
@@ -30,7 +33,7 @@ const displayedWeek = computed<Temporal.PlainDate[]>(() => {
 })
 
 const q2 = useQuery(ALL_BOOKINGS).result
-const allBookings = computed<any[]>(() => q2.value?.allBookings ?? [])
+const allBookings = computed<Booking[]>(() => q2.value?.allBookings ?? [])
 const displayedBookings = computed<any[]>(() => {
   return allBookings.value.filter((obj) => {
     if (obj.court.id !== activeCourtId.value) {
@@ -114,8 +117,8 @@ const hourGapPx = 75
 const initialOffsetPx = 100
 const lineOverlap = 30
 
-const minBooking = Temporal.Duration.from({hours: 0, minutes: 60})
-const increment = Temporal.Duration.from({hours: 0, minutes: 30})
+const minBooking = Temporal.Duration.from({hours: 0, minutes: 30})
+const increment = Temporal.Duration.from({hours: 0, minutes: 15})
 
 function getTimeOffsetPx(time: Temporal.PlainTime): number {
   return hourGapPx * ((time.hour - startTime.value.hour) + (time.minute - startTime.value.minute) / 60) + initialOffsetPx
@@ -177,25 +180,22 @@ function clearBooking() {
 </script>
 
 <template>
-  <div class="wrapper bg-white py-5"> <!-- stops highlighting if buttons are spammed -->
+  <div class="wrapper bg-white py-5 m-4 card"> <!-- stops highlighting if buttons are spammed -->
     <!-- actions bar -->
-    <div class="container-fluid card px-5 py-2">
+    <div class="container-xxl card bg-light border-2 p-2" style="position: sticky; top: 50px; z-index: 50">
       <div class="row justify-content-end">
         <div class="col-4 my-auto">
           <div class="row">
             <div class="col-7">
-              <div class="input-group">
-                <span class="input-group-text text-bg-dark">Court: </span>
-                <select class="form-select" v-model="activeCourtId">
-                  <option v-for="court in allCourts" :value="court.id">{{ court.name }}</option>
-                </select>
-              </div>
+              <select class="form-select" v-model="activeCourtId">
+                <option v-for="court in allCourts" :value="court.id">{{ court.name }}</option>
+              </select>
             </div>
             <div class="col-5">
-                    <button v-if="!firstDisplayedDay.equals(getMonday(today))" class="btn btn-outline-primary"
-                  @click="jumpViewToThisWeek">Jump to today
-          </button>
-          </div>
+              <button v-if="!firstDisplayedDay.equals(getMonday(today))" class="btn btn-outline-primary"
+                      @click="jumpViewToThisWeek">Jump to today
+              </button>
+            </div>
           </div>
 
         </div>
@@ -222,14 +222,16 @@ function clearBooking() {
 
         </div>
         <div class="col-4 my-auto">
-
-
+          <button v-if="userStore.isAuthenticated" class="btn btn-danger float-end" data-bs-toggle="modal"
+                  data-bs-target="#bookingModal">New booking
+          </button>
         </div>
       </div>
     </div>
 
     <!-- calendar -->
     <div class="outer-container container-fluid" :style="{height: totalHeight + hourGapPx + 'px'}">
+
       <div class="row g-0">
         <div class="hLine" v-for="time in timeLabels" :style="{top: getTimeOffsetPx(time) + 'px'}"></div>
         <div class="col-1">
@@ -239,7 +241,7 @@ function clearBooking() {
         </div>
         <div class="col" v-for="day in displayedWeek">
           <div class="dayLabel text-center" :class="{'text-danger': isToday(day), 'fw-bold': isToday(day)}">
-            <span class="fs-6">{{ daysShort[day.dayOfWeek - 1].toUpperCase() }}</span>
+            <span class="fs-6">{{ daysShort[day.dayOfWeek - 1].toUpperCase() }} </span>
             <p class="fs-3">{{ day.day }}</p></div>
           <div class="vLine bookingArea" @mousedown="mouseDown(day, $event)" @mousemove="mouseMove(day, $event)"
                @mouseup="mouseUp(day, $event)"
@@ -247,19 +249,27 @@ function clearBooking() {
           <div class="vLine"
                :style="{top: initialOffsetPx - lineOverlap + 'px', height: totalHeight - initialOffsetPx + 2 * lineOverlap + 'px'}"
                :class="{vLineHighlight: isVLineHighlighted(day)}"></div>
-          <div class="booking-container py-1"
+          <div class="booking-container px-1"
                v-for="booking in displayedBookings.filter(b => Temporal.PlainDate.from(b.date).equals(day))"
                :style="{top: getTimeOffsetPx(Temporal.PlainTime.from(booking.startTime)) + 'px', height: getTimeOffsetPx(Temporal.PlainTime.from(booking.endTime)) - getTimeOffsetPx(Temporal.PlainTime.from(booking.startTime)) + 'px'}">
-            <div class="booking text-bg-info card">
-              <div class="card-body p-2">
-                <p class="fw-bold">{{ getTimeString(booking.startTime, display24hr) }} -
-                  {{ getTimeString(booking.endTime, display24hr) }}</p>
-                <p class="fst-italic">{{ booking.description }}</p>
-                <p>{{ `${booking.user.firstName} ${booking.user.lastName} ${booking.user.email}` }}</p>
+            <div class="booking card"
+                 :class="userStore.user?.id == booking.user.id ? 'bg-success-subtle' : 'bg-dark-subtle'">
+              <div class="card-body py-2 px-1 d-flex flex-column justify-content-between">
+                <div class="align-self-start fs-6">
+                  <p class="fw-bold">{{ getTimeString(booking.startTime, display24hr) }} -
+                    {{ getTimeString(booking.endTime, display24hr) }}</p>
+                  <p class="fst-italic">{{ booking.description }}</p>
+                </div>
+                <div class="text-end fst-italic" style="font-size: 10pt">
+                  <p>{{ booking.user?.firstName + " " + booking.user.lastName }} <span v-if="userStore.user?.id === booking.user?.id">(you)</span></p>
+                  <p class="mb-0">{{ booking.user?.email }}</p>
+                </div>
+
+
               </div>
             </div>
           </div>
-          <div class="booking-container p-1"
+          <div class="booking-container px-1"
                v-if="tempBookingState !== 0 && tempBooking.date.equals(day)"
                :style="{top: getTimeOffsetPx(tempBooking.startTime) + 'px', height: getTimeOffsetPx(tempBooking.endTime) - getTimeOffsetPx(tempBooking.startTime) + 'px'}">
             <div class="tempBooking card bg-info-subtle py-0 px-1 is-bold  border-4 border-primary">
@@ -282,11 +292,6 @@ function clearBooking() {
           </div>
         </div>
       </div>
-    </div>
-    <div class="container-fluid my-3">
-      <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#bookingModal">
-        Launch demo modal
-      </button>
     </div>
     <BookingModal :new-booking="tempBooking" id="bookingModal"></BookingModal>
     <!--    <div class="modal" :class="{'is-active': modalOpen}">-->
@@ -333,8 +338,8 @@ function clearBooking() {
 .hLine {
   position: absolute;
   border-bottom: 1px dashed grey;
-  width: calc(100% * 10 / 12 + 2vw);
-  left: calc(100% / 12 - 1vw);
+  width: calc(100% * 10 / 12 + 1vw);
+  left: calc(100% / 12 - 0.5vw);
 }
 
 .vLine {
@@ -376,8 +381,7 @@ function clearBooking() {
 
 .booking {
   height: 100%;
-  font-size: 10pt;
-  line-height: 1em;
+  line-height: 0.5em;
 }
 
 .booking-form {
