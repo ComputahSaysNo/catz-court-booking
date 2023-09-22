@@ -161,6 +161,8 @@ function mouseDown(day: Temporal.PlainDate, e: MouseEvent) {
   let t = getTimeFromOffsetY(e.offsetY)
   tempBookingState.value = 1
   tempBooking.value.startTime = getTimeFromOffsetY(e.offsetY)
+  tempBooking.value.endTime = getTimeFromOffsetY(e.offsetY + (minBooking.minutes / 60) * hourGapPx)
+  tempBooking.value.date = day
   for (let booking of displayedBookings.value) {
     if (booking.date === day.toString()) {
       if (Temporal.PlainTime.compare(Temporal.PlainTime.from(booking.startTime), tempBooking.value.startTime) <= 0 && Temporal.PlainTime.compare(Temporal.PlainTime.from(booking.endTime), tempBooking.value.startTime) > 0) {
@@ -169,11 +171,10 @@ function mouseDown(day: Temporal.PlainDate, e: MouseEvent) {
       }
     }
   }
-  if (Temporal.Duration.compare(t.until(tempBookingEndLimit.value), minBooking) >= 0 && Temporal.PlainTime.compare(t, startTime.value) >= 0) {
-    tempBooking.value.endTime = getTimeFromOffsetY(e.offsetY + (minBooking.minutes / 60) * hourGapPx)
-    tempBooking.value.date = day
-  } else {
+  if (Temporal.Duration.compare(t.until(tempBookingEndLimit.value), minBooking) < 0 || Temporal.PlainTime.compare(t, startTime.value) < 0) {
     tempBookingState.value = 0
+    return
+
   }
 }
 
@@ -215,7 +216,7 @@ function clearBooking() {
 </script>
 
 <template>
-  <div class="wrapper bg-white py-5 m-4 card">
+  <div class="wrapper bg-white py-5 m-4 card" @mouseleave="tempBookingState=0"  @keydown.esc="tempBookingState=0" tabindex="0" >
     <!-- actions bar -->
     <div class="container-xxl card bg-light border-2 p-2" style="position: sticky; top: 50px; z-index: 50">
       <div class="row justify-content-end">
@@ -265,7 +266,7 @@ function clearBooking() {
     </div>
 
     <!-- calendar -->
-    <div class="outer-container container-fluid" :style="{height: totalHeight + hourGapPx + 'px'}">
+    <div class="outer-container container-fluid" :style="{height: totalHeight + hourGapPx + 'px'}" >
 
       <div class="row g-0">
         <div class="hLine" v-for="time in timeLabels" :style="{top: getTimeOffsetPx(time) + 'px'}"></div>
@@ -317,13 +318,15 @@ function clearBooking() {
           <div class="booking-container px-1"
                v-if="tempBookingState !== 0 && tempBooking.date.equals(day)"
                :style="{top: getTimeOffsetPx(tempBooking.startTime) + 'px', height: getTimeOffsetPx(tempBooking.endTime) - getTimeOffsetPx(tempBooking.startTime) + 'px'}">
-            <div class="tempBooking card bg-info-subtle py-0 px-1 is-bold  border-3 border-primary">
-              <div class="card-body p-0 d-flex flex-column justify-content-between">
-                <div class="fw-bold fs-6">{{ getTimeString(tempBooking.startTime, display24hr) }} -
+            <div class="tempBooking card bg-info-subtle py-0 px-1 is-bold  border-test">
+              <div class="card-body p-1 d-flex flex-column justify-content-between">
+                <div class="fw-bold fs-6 text-center">{{ getTimeString(tempBooking.startTime, display24hr) }} -
                   {{ getTimeString(tempBooking.endTime, display24hr) }}
                 </div>
-                <div class="align-self-center text-center">
-                  <i class="bi bi-chevron-down fs-3" style="line-height: 0;"></i>
+                <div class="align-self-center text-center font-monospace">
+                  <p class="mb-0">release to confirm</p>
+                  <p>press <span class="text-danger">esc</span> to cancel</p>
+                  <i class="bi bi-arrow-bar-down fs-3" style="line-height: 0;"></i>
                 </div>
               </div>
             </div>
@@ -395,7 +398,6 @@ function clearBooking() {
   position: absolute;
   border-left: 1px solid grey;
   border-right: none;
-  z-index: 10;
   width: calc(100% * (10 / (12 * 7)));
 }
 
@@ -413,7 +415,6 @@ function clearBooking() {
   border-right: solid;
   border-color: hsl(348, 100%, 61%);
   border-width: 3px;
-  z-index: 11;
   width: calc(100% * (10 / (12 * 7)));
 }
 
@@ -448,7 +449,6 @@ function clearBooking() {
   width: calc(100% * (10 / (12 * 7)));
   position: absolute;
   border-bottom: 4px solid hsl(204, 86%, 53%);
-  z-index: 100;
 }
 
 .outer-container {
@@ -464,4 +464,25 @@ function clearBooking() {
   user-select: none;
 }
 
+.btn-close {
+  position: relative;
+  z-index: 50;
+}
+
+.border-test {
+  background-image: linear-gradient(90deg, #1350ef 50%, transparent 50%), linear-gradient(90deg, #1350ef 50%, transparent 50%), linear-gradient(0deg, #1350ef 50%, transparent 50%), linear-gradient(0deg, #1350ef 50%, transparent 50%);
+  background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+  background-size: 30px 3px, 30px 3px, 3px 30px, 3px 30px;
+  background-position: left top, right bottom, left bottom, right top;
+  animation: border-dance 0.5s infinite linear;
+}
+
+@keyframes border-dance {
+  0% {
+    background-position: left top, right bottom, left bottom, right top;
+  }
+  100% {
+    background-position: left 30px top, right 30px bottom, left bottom 30px, right top 30px;
+  }
+}
 </style>
