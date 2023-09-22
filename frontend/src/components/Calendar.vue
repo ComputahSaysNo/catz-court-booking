@@ -27,6 +27,7 @@ watch(allCourts, () => {
   activeCourtId.value = allCourts.value[0].id
 })
 
+
 const firstDisplayedDay = ref<Temporal.PlainDate>(getMonday(today))
 const displayedWeek = computed<Temporal.PlainDate[]>(() => {
   return getWeek(firstDisplayedDay.value)
@@ -34,7 +35,7 @@ const displayedWeek = computed<Temporal.PlainDate[]>(() => {
 
 const q2 = useQuery(ALL_BOOKINGS).result
 const allBookings = computed<Booking[]>(() => q2.value?.allBookings ?? [])
-const displayedBookings = computed<any[]>(() => {
+const displayedBookings = computed<Booking[]>(() => {
   return allBookings.value.filter((obj) => {
     if (obj.court.id !== activeCourtId.value) {
       return false
@@ -106,19 +107,37 @@ watch(activeCourtId, () => {
   tempBookingState.value = 0
 })
 
+const tempBookingEndLimit = computed<Temporal.PlainTime>(() => {
+  if (tempBookingState.value === 0) {
+    return endTime.value
+  } else {
+    let earliestLimit = endTime.value
+    for (let booking of displayedBookings.value) {
+      const bookingStartTime = Temporal.PlainTime.from(booking.startTime)
+      if (booking.date === tempBooking.value.date.toString()) {
+        if (Temporal.PlainTime.compare(bookingStartTime, tempBooking.value.startTime) > 0) {
+          if (Temporal.PlainTime.compare(bookingStartTime, earliestLimit) < 0) {
+            earliestLimit = Temporal.PlainTime.from(booking.startTime)
+          }
+        }
+      }
+    }
+    return earliestLimit
+  }
+})
+
 // Display stuff
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 const daysShort = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 const monthsShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 
-// Magic numbers :/
-const hourGapPx = 75
-const initialOffsetPx = 100
-const lineOverlap = 30
+const hourGapPx = 80
+const initialOffsetPx = 120
+const lineOverlap = 40
 
-const minBooking = Temporal.Duration.from({hours: 0, minutes: 30})
-const increment = Temporal.Duration.from({hours: 0, minutes: 15})
+const minBooking = Temporal.Duration.from({hours: 0, minutes: 60})
+const increment = Temporal.Duration.from({hours: 0, minutes: 30})
 
 function getTimeOffsetPx(time: Temporal.PlainTime): number {
   return hourGapPx * ((time.hour - startTime.value.hour) + (time.minute - startTime.value.minute) / 60) + initialOffsetPx
@@ -140,11 +159,21 @@ const totalHeight = computed<number>(() => getTimeOffsetPx(endTime.value))
 
 function mouseDown(day: Temporal.PlainDate, e: MouseEvent) {
   let t = getTimeFromOffsetY(e.offsetY)
-  if (Temporal.Duration.compare(t.until(endTime.value), minBooking) >= 0 && Temporal.PlainTime.compare(t, startTime.value) >= 0) {
-    tempBookingState.value = 1
-    tempBooking.value.startTime = getTimeFromOffsetY(e.offsetY)
+  tempBookingState.value = 1
+  tempBooking.value.startTime = getTimeFromOffsetY(e.offsetY)
+  for (let booking of displayedBookings.value) {
+    if (booking.date === day.toString()) {
+      if (Temporal.PlainTime.compare(Temporal.PlainTime.from(booking.startTime), tempBooking.value.startTime) <= 0 && Temporal.PlainTime.compare(Temporal.PlainTime.from(booking.endTime), tempBooking.value.startTime) > 0) {
+        tempBookingState.value = 0
+        return
+      }
+    }
+  }
+  if (Temporal.Duration.compare(t.until(tempBookingEndLimit.value), minBooking) >= 0 && Temporal.PlainTime.compare(t, startTime.value) >= 0) {
     tempBooking.value.endTime = getTimeFromOffsetY(e.offsetY + (minBooking.minutes / 60) * hourGapPx)
     tempBooking.value.date = day
+  } else {
+    tempBookingState.value = 0
   }
 }
 
@@ -158,8 +187,14 @@ function mouseUp(day: Temporal.PlainDate, e: MouseEvent) {
 function mouseMove(day: Temporal.PlainDate, e: MouseEvent) {
   if (tempBookingState.value === 1) {
     let newEnd = getTimeFromOffsetY(e.offsetY)
-    if (Temporal.Duration.compare(tempBooking.value.startTime.until(newEnd), minBooking) >= 0 && Temporal.PlainTime.compare(endTime.value, newEnd) >= 0) {
-      tempBooking.value.endTime = newEnd
+
+    if (Temporal.Duration.compare(tempBooking.value.startTime.until(newEnd), minBooking) >= 0) {
+
+      if (Temporal.PlainTime.compare(tempBookingEndLimit.value, newEnd) >= 0) {
+        tempBooking.value.endTime = newEnd
+      } else {
+        tempBooking.value.endTime = tempBookingEndLimit.value
+      }
     }
   }
 }
@@ -180,7 +215,7 @@ function clearBooking() {
 </script>
 
 <template>
-  <div class="wrapper bg-white py-5 m-4 card"> <!-- stops highlighting if buttons are spammed -->
+  <div class="wrapper bg-white py-5 m-4 card">
     <!-- actions bar -->
     <div class="container-xxl card bg-light border-2 p-2" style="position: sticky; top: 50px; z-index: 50">
       <div class="row justify-content-end">
@@ -240,42 +275,56 @@ function clearBooking() {
           </div>
         </div>
         <div class="col" v-for="day in displayedWeek">
-          <div class="dayLabel text-center" :class="{'text-danger': isToday(day), 'fw-bold': isToday(day)}">
+          <div class="position-relative text-center" :class="{'text-danger': isToday(day), 'fw-bold': isToday(day)}"
+               :style="{top: `calc( ${initialOffsetPx}px - 100%)`}">
             <span class="fs-6">{{ daysShort[day.dayOfWeek - 1].toUpperCase() }} </span>
             <p class="fs-3">{{ day.day }}</p></div>
           <div class="vLine bookingArea" @mousedown="mouseDown(day, $event)" @mousemove="mouseMove(day, $event)"
                @mouseup="mouseUp(day, $event)"
-               :style="{top: initialOffsetPx - lineOverlap + 'px', height: totalHeight - initialOffsetPx + 4 * lineOverlap + 'px'}"></div>
+               :style="{top: initialOffsetPx - lineOverlap + 'px', height: totalHeight - initialOffsetPx + 4 * lineOverlap + 'px', cursor: tempBookingState === 1 ? 'ns-resize' : 'grab'}"></div>
           <div class="vLine"
                :style="{top: initialOffsetPx - lineOverlap + 'px', height: totalHeight - initialOffsetPx + 2 * lineOverlap + 'px'}"
                :class="{vLineHighlight: isVLineHighlighted(day)}"></div>
           <div class="booking-container px-1"
+               @mouseup="mouseUp(day, $event)"
+               @mousemove="mouseMove(day, $event)"
                v-for="booking in displayedBookings.filter(b => Temporal.PlainDate.from(b.date).equals(day))"
                :style="{top: getTimeOffsetPx(Temporal.PlainTime.from(booking.startTime)) + 'px', height: getTimeOffsetPx(Temporal.PlainTime.from(booking.endTime)) - getTimeOffsetPx(Temporal.PlainTime.from(booking.startTime)) + 'px'}">
             <div class="booking card"
                  :class="userStore.user?.id == booking.user.id ? 'bg-success-subtle' : 'bg-dark-subtle'">
-              <div class="card-body py-2 px-1 d-flex flex-column justify-content-between">
-                <div class="align-self-start fs-6">
-                  <p class="fw-bold">{{ getTimeString(booking.startTime, display24hr) }} -
-                    {{ getTimeString(booking.endTime, display24hr) }}</p>
-                  <p class="fst-italic">{{ booking.description }}</p>
+              <div class="card-body py-1 px-1 d-flex flex-column justify-content-between"
+              >
+                <div style="font-size: 11pt">
+                  <div class="mb-1">
+                    <span class="fw-bold">{{
+                        getTimeString(Temporal.PlainTime.from(booking.startTime), display24hr)
+                      }} - {{ getTimeString(Temporal.PlainTime.from(booking.endTime), display24hr) }}</span>
+                    <button v-if="userStore.user?.id === booking.user.id" class="btn-close float-end"
+                            style="font-size: 10pt;"></button>
+                  </div>
+                  <p class="mb-2">{{ booking.description }}</p>
                 </div>
-                <div class="text-end fst-italic" style="font-size: 10pt">
-                  <p>{{ booking.user?.firstName + " " + booking.user.lastName }} <span v-if="userStore.user?.id === booking.user?.id">(you)</span></p>
-                  <p class="mb-0">{{ booking.user?.email }}</p>
+                <div style="font-size: 9pt; line-height: 0.9em;">
+                  <p class="mb-1">{{ booking.user.firstName + " " + booking.user.lastName }} <span
+                      class="font-monospace text-primary">({{
+                      userStore.user?.id === booking.user.id ? 'you' : booking.user.email.split('@')[0]
+                    }})</span>
+                  </p>
                 </div>
-
-
               </div>
             </div>
           </div>
           <div class="booking-container px-1"
                v-if="tempBookingState !== 0 && tempBooking.date.equals(day)"
                :style="{top: getTimeOffsetPx(tempBooking.startTime) + 'px', height: getTimeOffsetPx(tempBooking.endTime) - getTimeOffsetPx(tempBooking.startTime) + 'px'}">
-            <div class="tempBooking card bg-info-subtle py-0 px-1 is-bold  border-4 border-primary">
-              <div class="card-body px-1 py-0">
-                <p class="fw-bold fs-6">{{ getTimeString(tempBooking.startTime, display24hr) }} -
-                  {{ getTimeString(tempBooking.endTime, display24hr) }}</p>
+            <div class="tempBooking card bg-info-subtle py-0 px-1 is-bold  border-3 border-primary">
+              <div class="card-body p-0 d-flex flex-column justify-content-between">
+                <div class="fw-bold fs-6">{{ getTimeString(tempBooking.startTime, display24hr) }} -
+                  {{ getTimeString(tempBooking.endTime, display24hr) }}
+                </div>
+                <div class="align-self-center text-center">
+                  <i class="bi bi-chevron-down fs-3" style="line-height: 0;"></i>
+                </div>
               </div>
             </div>
           </div>
@@ -357,6 +406,7 @@ function clearBooking() {
 .bookingArea {
   border: none;
   z-index: 20;
+  background: transparent;
 }
 
 .vLineHighlight {
@@ -374,14 +424,10 @@ function clearBooking() {
   width: calc(100% / 12);
 }
 
-.dayLabel {
-  position: relative;
-  top: 1.5em;
-}
-
 .booking {
   height: 100%;
-  line-height: 0.5em;
+  line-height: 0.9em;
+  z-index: 10;
 }
 
 .booking-form {
@@ -390,7 +436,6 @@ function clearBooking() {
 
 .tempBooking {
   height: 100%;
-  border-radius: 5px;
   border-style: dashed;
   font-size: 10pt;
 }
@@ -403,7 +448,7 @@ function clearBooking() {
   width: calc(100% * (10 / (12 * 7)));
   position: absolute;
   border-bottom: 4px solid hsl(204, 86%, 53%);
-  z-index: 1;
+  z-index: 100;
 }
 
 .outer-container {
@@ -413,7 +458,6 @@ function clearBooking() {
 .booking-container {
   position: absolute;
   width: calc(100% * (10 / (12 * 7)) - 2px);
-  z-index: 9;
 }
 
 .wrapper {

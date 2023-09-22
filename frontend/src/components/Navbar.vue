@@ -14,10 +14,10 @@ function logout() {
 </script>
 
 <template>
-  <nav class="navbar navbar-expand-sm bg-danger p-3">
+  <nav class="navbar navbar-expand-sm bg-danger">
     <div class="container-fluid">
-      <span class="navbar-brand text-white fw-bold fs-3">
-        <img src="@/assets/catz-wheel.svg" width="50" height="50" class="mb-1 mx-1">
+      <span class="navbar-brand text-white fw-bold fs-4">
+        <img src="@/assets/catz-wheel.svg" width="35" height="35" class="mb-1 mx-1">
         Catz Court Booking</span>
       <form class="d-flex">
         <a href="http://127.0.0.1:8000/accounts/login/google-oauth2/" v-if="!userStore.isAuthenticated"

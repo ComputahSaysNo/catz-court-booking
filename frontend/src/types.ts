@@ -12,7 +12,7 @@ interface Booking {
     startTime: string
     endTime: string
     description: string
-    user: number
+    user: User
 }
 
 interface User {

@@ -42,7 +42,7 @@ class Booking(models.Model):
     class Meta:
         verbose_name = "booking"
         verbose_name_plural = "Bookings"
+        ordering = ["date", "start_time"]
 
     def __str__(self):
-        return f'{self.date} {self.start_time} - {self.end_time} ({self.user.email})'
-
+        return f'{self.court.name}: {self.date.strftime("%d %b")} {self.start_time.strftime("%H:%M")} - {self.end_time.strftime("%H:%M")} ({self.user.email})'
