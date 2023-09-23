@@ -66,8 +66,9 @@ const dismissed = ref<boolean>(false)
         </div>
       </div>
       <UserPanel v-if="userStore.isAuthenticated"></UserPanel>
-      <div v-else-if="!dismissed" class="container alert alert-info alert-dismissible mt-4 fw-bold">Login to make
-        bookings
+      <div v-if="!dismissed" class="container alert alert-warning alert-dismissible mt-4 fw-bold w-50">
+        <span v-if="!userStore.isAuthenticated">You must be logged in to create bookings</span>
+        <span v-else>Click and drag on the calendar to create a new booking</span>
         <button class="btn-close" @click="dismissed=true"></button>
       </div>
       <div class="">

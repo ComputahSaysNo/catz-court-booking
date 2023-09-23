@@ -194,7 +194,7 @@ const modalOpen = ref(false)
 </script>
 
 <template>
-  <div class="wrapper my-4 container-fluid bg-white py-5 card px-0"  @keydown.esc="newBooking.reset()" tabindex="0" >
+  <div class="wrapper my-4 container-fluid bg-white py-5 card px-0" @keydown.esc="newBooking.reset()" tabindex="0">
     <!-- actions bar -->
     <div class="controls container-fluid card bg-light border-2 p-2">
       <div class="row justify-content-end">
@@ -236,7 +236,7 @@ const modalOpen = ref(false)
 
         </div>
         <div class="col-4 my-auto">
-          <button  class="btn btn-danger float-end" data-bs-toggle="modal"
+          <button class="btn btn-danger float-end" data-bs-toggle="modal"
                   data-bs-target="#bookingModal">New booking
           </button>
         </div>
@@ -244,7 +244,7 @@ const modalOpen = ref(false)
     </div>
 
     <!-- calendar -->
-    <div class="outer-container container-fluid" :style="{height: totalHeight + hourGapPx + 'px'}" >
+    <div class="outer-container container-fluid" :style="{height: totalHeight + hourGapPx + 'px'}">
 
       <div class="row g-0">
         <div class="hLine" v-for="time in timeLabels" :style="{top: getTimeOffsetPx(time) + 'px'}"></div>
@@ -283,11 +283,12 @@ const modalOpen = ref(false)
                   </div>
                   <p class="mb-0">{{ booking.description }}</p>
                 </div>
-                <div style="font-size: 9pt; line-height: 0.9em;">
-                  <p class="mb-1">{{ booking.user.firstName + " " + booking.user.lastName }} <span
-                      class="font-monospace text-primary">({{
-                      userStore.user?.id === booking.user.id ? 'you' : booking.user.email.split('@')[0]
-                    }})</span>
+                <div style="font-size: 9pt; line-height: 1em;">
+                  <p class="mb-1 fst-italic"><i class="bi bi-person-fill"></i>
+                    {{ booking.user.firstName + " " + booking.user.lastName }} <span
+                        class="font-monospace fst-normal text-primary">({{
+                        userStore.user?.id === booking.user.id ? 'you' : booking.user.email.split('@')[0]
+                      }})</span>
                   </p>
                 </div>
               </div>
@@ -307,7 +308,7 @@ const modalOpen = ref(false)
                   <i class="bi bi-arrow-down fs-3" style="line-height: 0;"></i>
                 </div>
                 <div class="align-self-center" v-if="newBooking.state==='in-form'">
-                  <div class="confirmButtons">
+                  <div class="confirmButtons mb-2">
                     <i class="bi bi-check2 fs-4 bg-success rounded px-1 mx-2 text-white"></i>
                     <i class="bi bi-x-lg fs-4 bg-danger rounded px-1 mx-2 text-white" @click="newBooking.reset()"></i>
                   </div>
@@ -330,43 +331,6 @@ const modalOpen = ref(false)
       </div>
     </div>
     <BookingModal id="bookingModal"></BookingModal>
-    <!--    <div class="modal" :class="{'is-active': modalOpen}">-->
-    <!--      <div class="modal-background" style="background-color: rgba(10, 10, 10, 0.5)" @click="clearBooking"></div>-->
-    <!--      <div class="modal-card booking-form">-->
-    <!--        <header class="modal-card-head has-background-dark">-->
-    <!--          <p class="modal-card-title has-text-light">Create new booking</p>-->
-    <!--        </header>-->
-    <!--        <section class="modal-card-body">-->
-    <!--          <div class="field">-->
-    <!--            <label class="label">Date</label>-->
-    <!--            <div class="control">-->
-    <!--              <VueDatePicker v-model="tempBooking.date" :enable-time-picker="false" :format="dateFormatUK"-->
-    <!--                             :teleport="true" auto-apply :clearable="false"></VueDatePicker>-->
-    <!--            </div>-->
-    <!--          </div>-->
-    <!--          <div class="field">-->
-    <!--            <label class="label">Start time</label>-->
-    <!--            <div class="control">-->
-    <!--              <VueDatePicker v-model="tempBooking.startTime" time-picker :teleport="true" auto-apply-->
-    <!--                             :is-24="display24hr" :minutes-increment="incrementMinutes"-->
-    <!--                             no-minutes-overlay :min-time="startTime" :max-time="tempBooking.endTime" :clearable="false"></VueDatePicker>-->
-    <!--            </div>-->
-    <!--          </div>-->
-    <!--          <div class="field">-->
-    <!--            <label class="label">End time</label>-->
-    <!--            <div class="control">-->
-    <!--              <VueDatePicker v-model="tempBooking.endTime" time-picker :teleport="true" auto-apply-->
-    <!--                             :is-24="display24hr" :minutes-increment="incrementMinutes"-->
-    <!--                             no-minutes-overlay :min-time="tempBooking.startTime" :max-time="endTime" :clearable="false"></VueDatePicker>-->
-    <!--            </div>-->
-    <!--          </div>-->
-    <!--        </section>-->
-    <!--        <footer class="modal-card-foot">-->
-    <!--          <button class="button is-success" @click="confirmBooking">Confirm</button>-->
-    <!--          <button class="button is-danger" @click="clearBooking">Cancel</button>-->
-    <!--        </footer>-->
-    <!--      </div>-->
-    <!--    </div>-->
   </div>
 </template>
 
@@ -450,23 +414,25 @@ const modalOpen = ref(false)
 }
 
 .btn-close {
-  position: relative;
+  position: absolute;
   z-index: 50;
+  top: 0.2em;
+  right: 0.2em;
 }
 
 .confirmButtons {
-    position: relative;
-    z-index: 50;
-    cursor: pointer;
+  position: relative;
+  z-index: 50;
+  cursor: pointer;
 }
 
 .controls {
   position: sticky;
   top: 50px;
   z-index: 50;
-  max-width: calc(min(100vw,1200px));
-  right:0;
-  left:0;
+  max-width: calc(min(100vw, 1200px));
+  right: 0;
+  left: 0;
 }
 
 .border-test {
