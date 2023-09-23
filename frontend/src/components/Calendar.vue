@@ -20,7 +20,7 @@ const allCourts = computed<Court[]>(() => q1.value?.allCourts ?? [])
 const activeCourtId = ref<number>(1)
 const activeCourt = computed(() => {
   if (allCourts) {
-    return allCourts.value.find(obj => obj.id === activeCourtId.value)
+    return allCourts.value.find(obj => obj.id === activeCourtId.value) ?? null
   } else {
     return null
   }
@@ -91,17 +91,9 @@ const timeLabels = computed<Temporal.PlainTime[]>(() => {
     }
 )
 
-const tempBooking = ref({
-  startTime: new Temporal.PlainTime(10, 0),
-  endTime: new Temporal.PlainTime(12, 0),
-  date: today,
-  court: activeCourtId.value
-})
-const tempBookingState = ref(0)
-
 watch(activeCourtId, () => {
   newBooking.reset()
-  newBooking.courtId = activeCourtId.value
+  newBooking.court = activeCourt.value
 })
 
 const newBookingEndLimit = computed<Temporal.PlainTime>(() => {
@@ -202,14 +194,14 @@ const modalOpen = ref(false)
 </script>
 
 <template>
-  <div class="wrapper mt-4 container-fluid bg-white py-5 card"  @keydown.esc="newBooking.reset()" tabindex="0" >
+  <div class="wrapper my-4 container-fluid bg-white py-5 card px-0"  @keydown.esc="newBooking.reset()" tabindex="0" >
     <!-- actions bar -->
-    <div class="controls container-xxl card bg-light border-2 p-2">
+    <div class="controls container-fluid card bg-light border-2 p-2">
       <div class="row justify-content-end">
         <div class="col-4 my-auto">
           <div class="row">
             <div class="col-7">
-              <select class="form-select" v-model="activeCourtId">
+              <select class="form-select text-bg-white" v-model="activeCourtId">
                 <option v-for="court in allCourts" :value="court.id">{{ court.name }}</option>
               </select>
             </div>
@@ -222,7 +214,7 @@ const modalOpen = ref(false)
 
         </div>
         <div class="col-4 text-center">
-          <div class="btn-group">
+          <div class="btn-group mx-0">
             <button class="btn" @click="shiftViewByNumDays(-7)">
               <i class="bi bi-chevron-left"></i>
             </button>
@@ -268,7 +260,7 @@ const modalOpen = ref(false)
             <p class="fs-3">{{ day.day }}</p></div>
           <div class="vLine bookingArea" @mousedown="mouseDown(day, $event)" @mousemove="mouseMove(day, $event)"
                @mouseup="mouseUp(day, $event)"
-               :style="{top: initialOffsetPx - lineOverlap + 'px', height: totalHeight - initialOffsetPx + 4 * lineOverlap + 'px', cursor: tempBookingState === 1 ? 'ns-resize' : 'grab'}"></div>
+               :style="{top: initialOffsetPx - lineOverlap + 'px', height: totalHeight - initialOffsetPx + 4 * lineOverlap + 'px', cursor: newBooking.state === 'mouse-down' ? 'ns-resize' : newBooking.state === 'idle' ? 'grab' : 'default'}"></div>
           <div class="vLine"
                :style="{top: initialOffsetPx - lineOverlap + 'px', height: totalHeight - initialOffsetPx + 2 * lineOverlap + 'px'}"
                :class="{vLineHighlight: isVLineHighlighted(day)}"></div>
@@ -309,10 +301,16 @@ const modalOpen = ref(false)
                 <div class="fw-bold fs-6 text-center">{{ getTimeString(newBooking.startTime!, display24hr) }} -
                   {{ getTimeString(newBooking.endTime!, display24hr) }}
                 </div>
-                <div class="align-self-center text-center fw-bold">
+                <div class="align-self-center text-center fw-bold" v-if="newBooking.state==='mouse-down'">
                   <p class="mb-0">release to confirm</p>
                   <p>hit <span class="text-danger bg-light p-1 rounded">esc</span> to cancel</p>
                   <i class="bi bi-arrow-down fs-3" style="line-height: 0;"></i>
+                </div>
+                <div class="align-self-center" v-if="newBooking.state==='in-form'">
+                  <div class="confirmButtons">
+                    <i class="bi bi-check2 fs-4 bg-success rounded px-1 mx-2 text-white"></i>
+                    <i class="bi bi-x-lg fs-4 bg-danger rounded px-1 mx-2 text-white" @click="newBooking.reset()"></i>
+                  </div>
                 </div>
               </div>
             </div>
@@ -414,7 +412,6 @@ const modalOpen = ref(false)
 .booking {
   height: 100%;
   line-height: 0.9em;
-  z-index: 10;
 }
 
 .booking-form {
@@ -457,11 +454,19 @@ const modalOpen = ref(false)
   z-index: 50;
 }
 
+.confirmButtons {
+    position: relative;
+    z-index: 50;
+    cursor: pointer;
+}
+
 .controls {
   position: sticky;
   top: 50px;
   z-index: 50;
-  max-width: 100vw;
+  max-width: calc(min(100vw,1200px));
+  right:0;
+  left:0;
 }
 
 .border-test {
