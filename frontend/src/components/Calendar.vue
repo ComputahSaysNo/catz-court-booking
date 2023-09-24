@@ -1,43 +1,61 @@
 <script setup lang="ts">
+
+// external dependencies
 import {useQuery} from "@vue/apollo-composable"
-import {ALL_BOOKINGS, ALL_COURTS} from "@/queries";
-import {Temporal} from "temporal-polyfill";
-import {getMonday, getWeek, isToday, getTimeString} from "@/utils/datetime";
 import {computed, ref, watch} from "vue";
+import {Temporal} from "temporal-polyfill";
+
+// src utils
+import {ALL_BOOKINGS, ALL_COURTS} from "@/queries";
+import {getMonday, getWeek, isToday, getTimeString} from "@/utils/datetime";
 import type {Court, Booking} from "@/types"
+
+// components
 import BookingModal from "@/components/BookingModal.vue"
+
+// stores
 import {useUserStore} from "@/stores/user";
 import {useNewBookingStore} from "@/stores/newBooking";
+import {useSettingsStore} from "@/stores/settings";
 
-const userStore = useUserStore()
+const currentUser = useUserStore()
 const newBooking = useNewBookingStore()
+const settings = useSettingsStore()
 
-const display24hr = true
+// useful consts
 const today = Temporal.Now.plainDateISO()
+const now = Temporal.Now.plainTimeISO()
+const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+const daysShort = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+const monthsShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 
+
+// graphics options
+const hourGapPx = 80 // height of one hour
+const initialOffsetPx = 120 // probably can refactor this one into a css margin - stops the controls overlapping with the calendar
+const lineOverlap = 40 // the amount the vertical lines extend past the top and bottom
+
+
+// TODO: move both of these to per-court parameters
+// TODO: add max booking length
+const minBooking = Temporal.Duration.from({hours: 0, minutes: 60})
+const increment = Temporal.Duration.from({hours: 0, minutes: 30})
+
+// Queries =============================================================================================================
+// These are executed on component load
+
+
+// 1. Courts
 const q1 = useQuery(ALL_COURTS).result
-const allCourts = computed<Court[]>(() => q1.value?.allCourts ?? [])
-const activeCourtId = ref<number>(1)
-const activeCourt = computed(() => {
-  if (allCourts) {
-    return allCourts.value.find(obj => obj.id === activeCourtId.value) ?? null
-  } else {
-    return null
-  }
-})
-watch(allCourts, () => {
-  activeCourtId.value = allCourts.value[0].id
-})
+const allCourts = computed<Court[]>(() => q1.value?.allCourts ?? []) // is [] until the list loads from server
 
 
-const firstDisplayedDay = ref<Temporal.PlainDate>(getMonday(today))
-const displayedWeek = computed<Temporal.PlainDate[]>(() => {
-  return getWeek(firstDisplayedDay.value)
-})
-
+// 2. Bookings
 const q2 = useQuery(ALL_BOOKINGS).result
 const allBookings = computed<Booking[]>(() => q2.value?.allBookings ?? [])
-const displayedBookings = computed<Booking[]>(() => {
+
+const displayedBookings = computed<Booking[]>(() => { // bookings on the screen (saves some compute time to have this preloaded)
   return allBookings.value.filter((obj) => {
     if (obj.court.id !== activeCourtId.value) {
       return false
@@ -48,7 +66,54 @@ const displayedBookings = computed<Booking[]>(() => {
 })
 
 
-const now = ref<Temporal.PlainTime>(Temporal.Now.plainTimeISO())
+// Refs and interactivity===============================================================================================
+
+// 1. Active court
+const activeCourtId = ref(1) // v-model into dropdown
+
+const activeCourt = computed<Court | null>(() => {
+  if (allCourts) {
+    return allCourts.value.find(obj => obj.id === activeCourtId.value) ?? null
+  } else {
+    return null
+  }
+})
+
+watch(allCourts, () => {
+  activeCourtId.value = allCourts.value[0].id
+})
+
+// since the Court type stores times as ISO strings rather than Temporal.PlainTime, define these two computeds
+// to avoid having to convert them all the time
+
+const activeCourtOpeningTime = computed<Temporal.PlainTime>(() => {
+  if (activeCourt.value) {
+    return Temporal.PlainTime.from(activeCourt.value?.openingTime)
+  } else {
+    return new Temporal.PlainTime(7, 0) // default opening time before court info loads
+  }
+})
+
+const activeCourtClosingTime = computed<Temporal.PlainTime>(() => {
+  if (activeCourt.value) {
+    return Temporal.PlainTime.from(activeCourt.value?.closingTime)
+  } else {
+    return new Temporal.PlainTime(22, 0) // default closing time before court info loads
+  }
+})
+
+watch(activeCourtId, () => {
+  // reset any temp booking we've made if the selected court changes
+  newBooking.reset()
+  newBooking.court = activeCourt.value
+})
+
+// 2. Current week in calendar
+
+const firstDisplayedDay = ref<Temporal.PlainDate>(getMonday(today)) // the leftmost displayed day (initialise to the monday of this week)
+const displayedWeek = computed<Temporal.PlainDate[]>(() => { // rest of the week
+  return getWeek(firstDisplayedDay.value)
+})
 
 function shiftViewByNumDays(n: number): void {
   firstDisplayedDay.value = firstDisplayedDay.value.add({days: n})
@@ -58,82 +123,32 @@ function jumpViewToThisWeek(): void {
   firstDisplayedDay.value = getMonday(today)
 }
 
-function isVLineHighlighted(d: Temporal.PlainDate): Boolean {
-  return (isToday(d)) && Temporal.PlainDate.compare(firstDisplayedDay.value, today) <= 0
-}
+// 3. Time labels
 
-const startTime = computed<Temporal.PlainTime>(() => {
-  if (activeCourt.value) {
-    return Temporal.PlainTime.from(activeCourt.value?.openingTime)
-  } else {
-    return new Temporal.PlainTime(6, 0)
-  }
-})
-
-const endTime = computed<Temporal.PlainTime>(() => {
-  if (activeCourt.value) {
-    return Temporal.PlainTime.from(activeCourt.value?.closingTime)
-  } else {
-    return new Temporal.PlainTime(22, 0)
-  }
-})
-
-
-const timeLabels = computed<Temporal.PlainTime[]>(() => {
-      let t: Temporal.PlainTime[] = [startTime.value]
-      for (let i = startTime.value.hour + 1; i <= endTime.value.hour; i++) {
+const timeLabels = computed<Temporal.PlainTime[]>(() => { // list (of Temporal.PlainTimes) of the values to go down the side
+      let t: Temporal.PlainTime[] = [activeCourtOpeningTime.value] // always start at the opening time, even if it's not a whole hour
+      for (let i = activeCourtOpeningTime.value.hour + 1; i <= activeCourtClosingTime.value.hour; i++) { // add every whole hour up to closing
         t.push(new Temporal.PlainTime(i, 0))
       }
-      if (endTime.value.minute !== 0) {
-        t.push(endTime.value)
+      if (activeCourtClosingTime.value.minute !== 0) {
+        t.push(activeCourtClosingTime.value) // manually add closing time if it's not a whole hour
       }
       return t
     }
 )
 
-watch(activeCourtId, () => {
-  newBooking.reset()
-  newBooking.court = activeCourt.value
-})
 
-const newBookingEndLimit = computed<Temporal.PlainTime>(() => {
-  if (newBooking.state === 'idle') {
-    return endTime.value
-  } else {
-    let earliestLimit = endTime.value
-    for (let booking of displayedBookings.value) {
-      const bookingStartTime = Temporal.PlainTime.from(booking.startTime)
-      if (booking.date === newBooking.date?.toString()) {
-        if (Temporal.PlainTime.compare(bookingStartTime, newBooking.startTime!) > 0) {
-          if (Temporal.PlainTime.compare(bookingStartTime, earliestLimit) < 0) {
-            earliestLimit = Temporal.PlainTime.from(booking.startTime)
-          }
-        }
-      }
-    }
-    return earliestLimit
-  }
-})
+// Calendar display helper functions ===================================================================================
+// These enable click-and-drag event creation
 
-// Display stuff
-const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-const daysShort = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-const monthsShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
-
-const hourGapPx = 80
-const initialOffsetPx = 120
-const lineOverlap = 40
-
-const minBooking = Temporal.Duration.from({hours: 0, minutes: 60})
-const increment = Temporal.Duration.from({hours: 0, minutes: 30})
-
+// Pass this as the top: parameter in CSS to set an event at the right height
 function getTimeOffsetPx(time: Temporal.PlainTime): number {
-  return hourGapPx * ((time.hour - startTime.value.hour) + (time.minute - startTime.value.minute) / 60) + initialOffsetPx
+  return hourGapPx * ((time.hour - activeCourtOpeningTime.value.hour) + (time.minute - activeCourtOpeningTime.value.minute) / 60) + initialOffsetPx
 }
 
+// Given an OffsetY (coord within parent element, easy to get from MouseEvent), works out the corresponding time
 function getTimeFromOffsetY(offsetY: number, round: number = increment.minutes): Temporal.PlainTime {
-  let hourFractional = ((offsetY - lineOverlap) / hourGapPx) + startTime.value.hour
+  let hourFractional = ((offsetY - lineOverlap) / hourGapPx) + activeCourtOpeningTime.value.hour
   let hourInt = Math.floor(hourFractional)
   let minutes = Math.round(((60 * (hourFractional - hourInt)) / round)) * round
   if (minutes === 60) {
@@ -143,65 +158,158 @@ function getTimeFromOffsetY(offsetY: number, round: number = increment.minutes):
   return new Temporal.PlainTime(hourInt, minutes)
 }
 
+const totalHeight = computed<number>(() => getTimeOffsetPx(activeCourtClosingTime.value))
 
-const totalHeight = computed<number>(() => getTimeOffsetPx(endTime.value))
+const modalOpen = ref(false)
 
-function mouseDown(day: Temporal.PlainDate, e: MouseEvent) {
-  let t = getTimeFromOffsetY(e.offsetY)
-  newBooking.state = "mouse-down"
-  newBooking.startTime = getTimeFromOffsetY(e.offsetY)
-  newBooking.endTime = getTimeFromOffsetY(e.offsetY + (minBooking.minutes / 60) * hourGapPx)
-  newBooking.date = day
+
+// Booking logic =======================================================================================================
+
+// For a given start time and day, find the latest that booking could end
+// It's not super optimal to call this on every MouseMove since limit won't change until the start time changes
+// But hopefully the user isn't spamming bookings enough that this is an issue
+
+function getLatestEndTime(startTime: Temporal.PlainTime, day: Temporal.PlainDate): Temporal.PlainTime {
+
+  // initialise to the court's closing time
+  let limit = activeCourtClosingTime.value
+
+  // replace limit by the EARLIEST START TIME of any bookings on this day WHICH START AFTER OURS, if any
+
   for (let booking of displayedBookings.value) {
+    const existingBookingStartTime = Temporal.PlainTime.from(booking.startTime) // Type Booking stores times as strings! (Apollo query result)
+    // Check date
     if (booking.date === day.toString()) {
-      if (Temporal.PlainTime.compare(Temporal.PlainTime.from(booking.startTime), newBooking.startTime) <= 0 && Temporal.PlainTime.compare(Temporal.PlainTime.from(booking.endTime), newBooking.startTime) > 0) {
-        newBooking.reset()
-        return
+      // Check this booking starts after ours
+      if (Temporal.PlainTime.compare(existingBookingStartTime, startTime) > 0) {
+        // update limit if it's just moved earlier
+        if (Temporal.PlainTime.compare(existingBookingStartTime, limit) < 0) {
+          limit = existingBookingStartTime
+        }
       }
     }
   }
-  if (Temporal.Duration.compare(t.until(newBookingEndLimit.value), minBooking) < 0 || Temporal.PlainTime.compare(t, startTime.value) < 0) {
-    newBooking.reset()
-    return
+
+  return limit
+}
+
+
+// Given a certain start time and day, validate an end time
+
+function isValidEndTime(endTime: Temporal.PlainTime, startTime: Temporal.PlainTime, day: Temporal.PlainDate): boolean {
+
+  // 1. return false if the end time is after closing
+  if (Temporal.PlainTime.compare(endTime, activeCourtClosingTime.value) > 0) {
+    return false
+  }
+
+  // 2. return false if the resultant booking is shorter than the minimum booking
+  if (Temporal.Duration.compare(startTime.until(endTime), minBooking) < 0) {
+    return false
+  }
+
+  // 2. work out when the latest the end time could be is
+  const limit = getLatestEndTime(startTime, day)
+
+  // 3. return false if the end time is past this limit
+  if (Temporal.PlainTime.compare(endTime, limit) > 0) {
+    return false
+  }
+
+  // 4. otherwise, we're good
+  return true
+
+}
+
+// Validate a start time (needs to account for when it could end according to minBooking)
+function isValidStartTime(startTime: Temporal.PlainTime, day: Temporal.PlainDate): boolean {
+  // return false if start time is before court opening
+  if (Temporal.PlainTime.compare(activeCourtOpeningTime.value, startTime) > 0) {
+    return false
+  }
+
+  // return false if start time is inside another booking
+  for (let booking of displayedBookings.value) {
+    if (booking.date === day.toString()) {
+      if (Temporal.PlainTime.compare(Temporal.PlainTime.from(booking.startTime), startTime) <= 0 && Temporal.PlainTime.compare(Temporal.PlainTime.from(booking.endTime), startTime) > 0) {
+        return false
+      }
+    }
+  }
+  // return false if start time + min booking duration is not a valid end time (inside a booking or after closing)
+  if (!isValidEndTime(startTime.add(minBooking), startTime, day)) {
+    return false
+  }
+
+  // otherwise, we're good
+  return true
+}
+
+
+// Event handlers ======================================================================================================
+
+function calendarMouseDown(day: Temporal.PlainDate, e: MouseEvent) {
+  const proposedStartTime = getTimeFromOffsetY(e.offsetY)
+  if (isValidStartTime(proposedStartTime, day)) {
+    newBooking.state = "mouse-down"
+    newBooking.startTime = proposedStartTime
+    newBooking.endTime = proposedStartTime.add(minBooking)
+    newBooking.date = day
   }
 }
 
-function mouseUp(day: Temporal.PlainDate, e: MouseEvent) {
+function calendarMouseUp() {
   if (newBooking.state === "mouse-down") {
     newBooking.state = "in-form"
     modalOpen.value = true
   }
 }
 
-function mouseMove(day: Temporal.PlainDate, e: MouseEvent) {
+const bookingStartIndicator = ref({day: today, time: activeCourtOpeningTime.value, visible: false})
+
+function calendarMouseMove(e: MouseEvent) {
   if (newBooking.state === "mouse-down") {
-    let newEnd = getTimeFromOffsetY(e.offsetY)
-
-    if (Temporal.Duration.compare(newBooking.startTime!.until(newEnd), minBooking) >= 0) {
-
-      if (Temporal.PlainTime.compare(newBookingEndLimit.value, newEnd) >= 0) {
-        newBooking.endTime = newEnd
-      } else {
-        newBooking.endTime = newBookingEndLimit.value
-      }
+    let proposedEndTime = getTimeFromOffsetY(e.offsetY)
+    if (proposedEndTime === newBooking.endTime) {
+      return
+    } // skip if we've not moved the end time (saves computing on a lot of mouse events)
+    if (isValidEndTime(proposedEndTime, newBooking.startTime!, newBooking.date!)) {
+      newBooking.endTime = proposedEndTime
     }
   }
 }
 
-const modalOpen = ref(false)
+const shiftPressed = ref(false)
 
+document.addEventListener('keydown', (e) => {
+  if (e.key === "Shift") {
+    shiftPressed.value = true
+  }
+})
+
+document.addEventListener('keyup', (e) => {
+  if (e.key === "Shift") {
+    shiftPressed.value = false
+  }
+})
+
+document.addEventListener('keyup', (e) => {
+  if (e.key === "Escape") {
+    newBooking.state = 'idle'
+  }
+})
 
 </script>
 
 <template>
-  <div class="wrapper my-4 container-fluid bg-white py-5 card px-0" @keydown.esc="newBooking.reset()" tabindex="0">
+  <div class="wrapper my-4 container-fluid bg-white pb-5 card px-0">
     <!-- actions bar -->
-    <div class="controls container-fluid card bg-light border-2 p-2">
+    <div class="controls container-fluid card bg-light border-dark border-3 p-2 mt-5">
       <div class="row justify-content-end">
         <div class="col-4 my-auto">
           <div class="row">
             <div class="col-7">
-              <select class="form-select text-bg-white" v-model="activeCourtId">
+              <select class="form-select" v-model="activeCourtId">
                 <option v-for="court in allCourts" :value="court.id">{{ court.name }}</option>
               </select>
             </div>
@@ -215,8 +323,8 @@ const modalOpen = ref(false)
         </div>
         <div class="col-4 text-center">
           <div class="btn-group mx-0">
-            <button class="btn" @click="shiftViewByNumDays(-7)">
-              <i class="bi bi-chevron-left"></i>
+            <button class="btn" @click="shiftViewByNumDays(-1)" @click.shift="shiftViewByNumDays(-7)">
+              <i class="bi fs-3" :class="shiftPressed ? 'bi-chevron-double-left' : 'bi-chevron-left'"></i>
             </button>
             <button class="btn fs-5" style="min-width: 200px">
                 <span v-if="displayedWeek[0].month ===  displayedWeek[6].month">
@@ -229,8 +337,8 @@ const modalOpen = ref(false)
               </span>
               <span> {{ " " + displayedWeek[6].year }}</span>
             </button>
-            <button class="btn" @click="shiftViewByNumDays(7)">
-              <i class="bi bi-chevron-right"></i>
+            <button class="btn" @click="shiftViewByNumDays(1)" @click.shift="shiftViewByNumDays(7)">
+              <i class="bi fs-3" :class="shiftPressed ? 'bi-chevron-double-right' : 'bi-chevron-right'"></i>
             </button>
           </div>
 
@@ -250,7 +358,7 @@ const modalOpen = ref(false)
         <div class="hLine" v-for="time in timeLabels" :style="{top: getTimeOffsetPx(time) + 'px'}"></div>
         <div class="col-1">
           <div class="timeLabel" v-for="time in timeLabels" :style="{top: getTimeOffsetPx(time) + 'px'}">
-            {{ getTimeString(time, display24hr) }}
+            {{ getTimeString(time, settings.timeFormat24h) }}
           </div>
         </div>
         <div class="col" v-for="day in displayedWeek">
@@ -258,27 +366,26 @@ const modalOpen = ref(false)
                :style="{top: `calc( ${initialOffsetPx}px - 100%)`}">
             <span class="fs-6">{{ daysShort[day.dayOfWeek - 1].toUpperCase() }} </span>
             <p class="fs-3">{{ day.day }}</p></div>
-          <div class="vLine bookingArea" @mousedown="mouseDown(day, $event)" @mousemove="mouseMove(day, $event)"
-               @mouseup="mouseUp(day, $event)"
+          <div class="vLine bookingArea" @mousedown="calendarMouseDown(day, $event)"
+               @mousemove="calendarMouseMove($event)"
+               @mouseup="calendarMouseUp()"
                :style="{top: initialOffsetPx - lineOverlap + 'px', height: totalHeight - initialOffsetPx + 4 * lineOverlap + 'px', cursor: newBooking.state === 'mouse-down' ? 'ns-resize' : newBooking.state === 'idle' ? 'grab' : 'default'}"></div>
           <div class="vLine"
                :style="{top: initialOffsetPx - lineOverlap + 'px', height: totalHeight - initialOffsetPx + 2 * lineOverlap + 'px'}"
-               :class="{vLineHighlight: isVLineHighlighted(day)}"></div>
+               :class="{vLineHighlight: isToday(day)}"></div>
           <div class="booking-container px-1"
-               @mouseup="mouseUp(day, $event)"
-               @mousemove="mouseMove(day, $event)"
                v-for="booking in displayedBookings.filter(b => Temporal.PlainDate.from(b.date).equals(day))"
                :style="{top: getTimeOffsetPx(Temporal.PlainTime.from(booking.startTime)) + 'px', height: getTimeOffsetPx(Temporal.PlainTime.from(booking.endTime)) - getTimeOffsetPx(Temporal.PlainTime.from(booking.startTime)) + 'px'}">
             <div class="booking card"
-                 :class="userStore.user?.id == booking.user.id ? 'bg-success-subtle' : 'bg-dark-subtle'">
+                 :class="currentUser.user?.id == booking.user.id ? 'bg-success-subtle' : 'bg-dark-subtle'">
               <div class="card-body p-1 d-flex flex-column justify-content-between"
               >
                 <div style="font-size: 11pt">
                   <div class="mb-1">
                     <span class="fw-bold">{{
-                        getTimeString(Temporal.PlainTime.from(booking.startTime), display24hr)
-                      }} - {{ getTimeString(Temporal.PlainTime.from(booking.endTime), display24hr) }}</span>
-                    <button v-if="userStore.user?.id === booking.user.id" class="btn-close float-end"
+                        getTimeString(Temporal.PlainTime.from(booking.startTime), settings.timeFormat24h)
+                      }} - {{ getTimeString(Temporal.PlainTime.from(booking.endTime), settings.timeFormat24h) }}</span>
+                    <button v-if="currentUser.user?.id === booking.user.id" class="btn-close float-end"
                             style="font-size: 10pt;"></button>
                   </div>
                   <p class="mb-0">{{ booking.description }}</p>
@@ -287,7 +394,7 @@ const modalOpen = ref(false)
                   <p class="mb-1 fst-italic"><i class="bi bi-person-fill"></i>
                     {{ booking.user.firstName + " " + booking.user.lastName }} <span
                         class="font-monospace fst-normal text-primary">({{
-                        userStore.user?.id === booking.user.id ? 'you' : booking.user.email.split('@')[0]
+                        currentUser.user?.id === booking.user.id ? 'you' : booking.user.email.split('@')[0]
                       }})</span>
                   </p>
                 </div>
@@ -299,8 +406,9 @@ const modalOpen = ref(false)
                :style="{top: getTimeOffsetPx(newBooking.startTime!) + 'px', height: getTimeOffsetPx(newBooking.endTime!) - getTimeOffsetPx(newBooking.startTime!) + 'px'}">
             <div class="tempBooking card bg-info-subtle py-0 px-1 is-bold  border-test">
               <div class="card-body p-1 d-flex flex-column justify-content-between">
-                <div class="fw-bold fs-6 text-center">{{ getTimeString(newBooking.startTime!, display24hr) }} -
-                  {{ getTimeString(newBooking.endTime!, display24hr) }}
+                <div class="fw-bold fs-6 text-center">{{ getTimeString(newBooking.startTime!, settings.timeFormat24h) }}
+                  -
+                  {{ getTimeString(newBooking.endTime!, settings.timeFormat24h) }}
                 </div>
                 <div class="align-self-center text-center fw-bold" v-if="newBooking.state==='mouse-down'">
                   <p class="mb-0">release to confirm</p>
@@ -317,7 +425,7 @@ const modalOpen = ref(false)
             </div>
           </div>
           <div class="currTimeLine"
-               v-if="isToday(day) && Temporal.PlainTime.compare(startTime, now) <= 0 && Temporal.PlainTime.compare(endTime, now) >= 0"
+               v-if="isToday(day) && Temporal.PlainTime.compare(activeCourtOpeningTime, now) <= 0 && Temporal.PlainTime.compare(activeCourtClosingTime, now) >= 0"
                :style="{top: getTimeOffsetPx(now) + 'px'}">
           </div>
         </div>
@@ -325,7 +433,7 @@ const modalOpen = ref(false)
           <div class="vLine end"
                :style="{top: initialOffsetPx - lineOverlap + 'px', height: totalHeight - initialOffsetPx + 2 * lineOverlap + 'px'}"></div>
           <div class="timeLabel" v-for="time in timeLabels" :style="{top: getTimeOffsetPx(time) + 'px'}">
-            {{ getTimeString(time, display24hr) }}
+            {{ getTimeString(time, settings.timeFormat24h) }}
           </div>
         </div>
       </div>
@@ -337,7 +445,7 @@ const modalOpen = ref(false)
 <style scoped>
 .hLine {
   position: absolute;
-  border-bottom: 1px dashed grey;
+  border-bottom: 1px dashed #c1c1c1;
   width: calc(100% * 10 / 12 + 1vw);
   left: calc(100% / 12 - 0.5vw);
 }
@@ -364,6 +472,7 @@ const modalOpen = ref(false)
   border-color: hsl(348, 100%, 61%);
   border-width: 3px;
   width: calc(100% * (10 / (12 * 7)));
+  z-index: 1;
 }
 
 .timeLabel {
@@ -440,7 +549,7 @@ const modalOpen = ref(false)
   background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
   background-size: 30px 3px, 30px 3px, 3px 30px, 3px 30px;
   background-position: left top, right bottom, left bottom, right top;
-  animation: border-dance 0.5s infinite linear;
+  animation: border-dance 0.3s infinite linear;
 }
 
 @keyframes border-dance {
