@@ -23,7 +23,6 @@ const settings = useSettingsStore()
 // useful consts
 const today = Temporal.Now.plainDateISO()
 const now = Temporal.Now.plainTimeISO()
-const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 const daysShort = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 const monthsShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
@@ -34,11 +33,6 @@ const hourGapPx = 100 // height of one hour
 
 const vLineOverflowPx = 40 // the amount the vertical lines extend past the top and bottom
 
-
-// TODO: move both of these to per-court parameters
-// TODO: add max booking length
-const minBooking = Temporal.Duration.from({hours: 0, minutes: 60})
-const maxBooking = Temporal.Duration.from({hours: 3, minutes: 0})
 const increment = Temporal.Duration.from({hours: 0, minutes: 30})
 
 // Queries =============================================================================================================
@@ -98,6 +92,22 @@ const activeCourtClosingTime = computed<Temporal.PlainTime>(() => {
     return Temporal.PlainTime.from(activeCourt.value?.closingTime)
   } else {
     return new Temporal.PlainTime(22, 0) // default closing time before court info loads
+  }
+})
+
+const minBooking = computed<Temporal.Duration>(()=>{
+  if (activeCourt.value) {
+    return Temporal.Duration.from({minutes: activeCourt.value?.minBookingLengthMinutes}).round({largestUnit: 'hours'})
+  } else {
+    return Temporal.Duration.from({hours: 1})
+  }
+})
+
+const maxBooking = computed<Temporal.Duration>(()=>{
+  if (activeCourt.value) {
+    return Temporal.Duration.from({minutes: activeCourt.value?.maxBookingLengthMinutes}).round({largestUnit: 'hours'})
+  } else {
+    return Temporal.Duration.from({hours: 3})
   }
 })
 
@@ -205,12 +215,12 @@ function isValidEndTime(endTime: Temporal.PlainTime, startTime: Temporal.PlainTi
   }
 
   // 2. return false if the booking is too long
-  if (Temporal.Duration.compare(startTime.until(endTime), maxBooking) > 0) {
+  if (Temporal.Duration.compare(startTime.until(endTime), maxBooking.value) > 0) {
     return false
   }
 
   // 3. return false if the resultant booking is shorter than the minimum booking
-  if (Temporal.Duration.compare(startTime.until(endTime), minBooking) < 0) {
+  if (Temporal.Duration.compare(startTime.until(endTime), minBooking.value) < 0) {
     return false
   }
 
@@ -243,7 +253,7 @@ function isValidStartTime(startTime: Temporal.PlainTime, day: Temporal.PlainDate
     }
   }
   // return false if start time + min booking duration is not a valid end time (inside a booking or after closing)
-  if (!isValidEndTime(startTime.add(minBooking), startTime, day)) {
+  if (!isValidEndTime(startTime.add(minBooking.value), startTime, day)) {
     return false
   }
 
@@ -262,7 +272,7 @@ function calendarMouseDown(day: Temporal.PlainDate, e: MouseEvent) {
   if (isValidStartTime(proposedStartTime, day)) {
     newBooking.state = "mouse-down"
     newBooking.startTime = proposedStartTime
-    newBooking.endTime = proposedStartTime.add(minBooking)
+    newBooking.endTime = proposedStartTime.add(minBooking.value)
     newBooking.date = day
     bookingStartIndicator.value.visible = false
   }

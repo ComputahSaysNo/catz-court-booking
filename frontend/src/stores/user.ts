@@ -8,6 +8,7 @@ export const useUserStore = defineStore('user', () => {
 
     const user = ref<User|null>(null)
     const isAuthenticated = ref<boolean>(false)
+    const groups = ref<string[]>([])
 
-    return {user, isAuthenticated}
+    return {user, isAuthenticated, groups}
 })

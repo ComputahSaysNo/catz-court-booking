@@ -36,6 +36,7 @@ onMounted(() => {
         if (sessionInfo.isAuthenticated) {
           userStore.user = sessionInfo.user
           userStore.isAuthenticated = true
+          userStore.groups = sessionInfo.groups
           router.push('/')
         } else {
           loginError.value = true

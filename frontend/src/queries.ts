@@ -38,6 +38,9 @@ export const ALL_COURTS = gql`
             name
             openingTime
             closingTime
+            minBookingLengthMinutes
+            maxBookingLengthMinutes
+            maxBookingDaysInAdvance
         }
     }
 `
@@ -53,6 +56,7 @@ export const SESSION_INFO = gql`
                 lastName
                 email
             }
+            groups
         }
     }
 `

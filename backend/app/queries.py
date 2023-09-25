@@ -41,4 +41,5 @@ class Query(graphene.ObjectType):
         s = types.SessionInfoType()
         s.is_authenticated = user.is_authenticated
         s.user = user if user.is_authenticated else None
+        s.groups = [g.name for g in user.groups.all()] if user.is_authenticated else []
         return s

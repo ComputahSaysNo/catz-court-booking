@@ -3,6 +3,9 @@ interface Court {
     name: string
     openingTime: string
     closingTime: string
+    minBookingLengthMinutes: number
+    maxBookingLengthMinutes: number
+    maxBookingDaysInAdvance: number
 }
 
 interface Booking {

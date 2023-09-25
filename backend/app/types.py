@@ -19,6 +19,7 @@ class CourtType(DjangoObjectType):
 
 
 class BookingType(DjangoObjectType):
+
     class Meta:
         model = models.Booking
 
@@ -26,3 +27,4 @@ class BookingType(DjangoObjectType):
 class SessionInfoType(graphene.ObjectType):
     is_authenticated = graphene.Boolean()
     user = graphene.Field(UserType)
+    groups = graphene.List(graphene.String)

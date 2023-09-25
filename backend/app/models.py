@@ -1,5 +1,6 @@
 from django.contrib.auth.models import User, AnonymousUser
 from django.db import models
+from datetime import timedelta
 
 
 # Create your models here.
@@ -20,6 +21,9 @@ class Court(models.Model):
     name = models.CharField(max_length=100)
     opening_time = models.TimeField()
     closing_time = models.TimeField()
+    min_booking_length_minutes = models.IntegerField(default=60, verbose_name="Minimum booking length (minutes)")
+    max_booking_length_minutes = models.IntegerField(null=True, blank=True, default=180, verbose_name="Maximum booking length (minutes) for non-captains")
+    max_booking_days_in_advance = models.IntegerField(null=True, blank=True, default=14, verbose_name="Maximum days in advance for non-captains")
 
     class Meta:
         verbose_name = "court"
