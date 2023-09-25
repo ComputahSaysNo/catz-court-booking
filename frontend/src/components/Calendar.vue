@@ -30,9 +30,9 @@ const months = ["January", "February", "March", "April", "May", "June", "July", 
 
 
 // graphics options
-const hourGapPx = 80 // height of one hour
+const hourGapPx = 100 // height of one hour
 
-const vLineOverflowPx = 100 // the amount the vertical lines extend past the top and bottom
+const vLineOverflowPx = 40 // the amount the vertical lines extend past the top and bottom
 
 
 // TODO: move both of these to per-court parameters
@@ -249,6 +249,9 @@ function isValidStartTime(startTime: Temporal.PlainTime, day: Temporal.PlainDate
 // Event handlers ======================================================================================================
 
 function calendarMouseDown(day: Temporal.PlainDate, e: MouseEvent) {
+  if (!currentUser.isAuthenticated) {
+    return
+  } // must be logged in to make bookings
   const proposedStartTime = getTimeFromOffsetY(e.offsetY)
   if (isValidStartTime(proposedStartTime, day)) {
     newBooking.state = "mouse-down"
@@ -287,7 +290,7 @@ function calendarMouseMove(day: Temporal.PlainDate, e: MouseEvent) {
   // otherwise update the start time indicator
   if (newBooking.state === "idle" && currentUser.isAuthenticated) {
     if (isValidStartTime(newTime, day)) {
-      if (!bookingStartIndicator.value.time.equals(newTime) || !bookingStartIndicator.value.day.equals(day)) {
+      if (!bookingStartIndicator.value.visible || !bookingStartIndicator.value.time.equals(newTime) || !bookingStartIndicator.value.day.equals(day)) {
         bookingStartIndicator.value.time = newTime
         bookingStartIndicator.value.day = day
         bookingStartIndicator.value.visible = true
@@ -305,7 +308,7 @@ document.addEventListener('keyup', (e) => {
 </script>
 
 <template>
-  <div class="outerWrapper container-fluid card pb-5 px-0">
+  <div class="outerWrapper container-fluid card pb-5 px-0 my-4">
 
     <!-- Sticky top section with calendar controls and date labels -->
     <div class="top bg-white mb-2">
@@ -378,7 +381,8 @@ document.addEventListener('keyup', (e) => {
     </div>
 
     <!-- Calendar body-->
-    <div class="main container-fluid" :style="{height: totalHeight + hourGapPx + 'px'}">
+    <div class="main container-fluid" :style="{height: totalHeight + hourGapPx + 'px'}"
+         @mouseout="bookingStartIndicator.visible=false">
 
       <!-- Everything is in this row, with structure col-1 | (col) x 7 | col-1 -->
       <div class="row g-0">
@@ -400,8 +404,9 @@ document.addEventListener('keyup', (e) => {
                @mousedown="calendarMouseDown(columnDay, $event)"
                @mousemove="calendarMouseMove(columnDay, $event)"
                @mouseup="calendarMouseUp()"
+               @mouseout="calendarMouseUp()"
                :style="{top: `${-vLineOverflowPx}px`, height: `${totalHeight + 2 * vLineOverflowPx}px`,
-                        cursor: newBooking.state === 'mouse-down' ? 'ns-resize' : newBooking.state === 'idle' ? 'grab' : 'default'}"
+                        cursor: !currentUser.isAuthenticated ? 'default' : newBooking.state === 'mouse-down' ? 'ns-resize' : newBooking.state === 'idle' ? 'grab' : 'default'}"
                :class="{borderHighlight: isToday(columnDay), last: index===7-1}">
           </div> <!--overflows a bit past totalHeight to make the vertical lines extend past the top a little -->
 
@@ -483,17 +488,24 @@ document.addEventListener('keyup', (e) => {
                 </div>
 
                 <!-- Confirmation dialog after user releases mouse -->
-                <div class="" v-if="newBooking.state==='in-form'">
-
-                  <div class="confirmButtons mb-2 d-flex justify-content-evenly">
-                    <i class="bi bi-check2 fs-4 bg-success rounded px-2 text-white"></i>
-                    <i class="bi bi-x-lg fs-4 bg-danger rounded px-2 text-white" @click="newBooking.reset()"></i>
+                <div v-if="newBooking.state==='in-form'">
+                  <div class="confirmButtons d-flex justify-content-evenly px-0 mb-2 rounded">
+                    <button class="bi bi-check2 fs-4 bg-success rounded px-2 text-white"></button>
+                    <button class="bi bi-x-lg fs-4 bg-danger rounded px-2 text-white"
+                            @click="newBooking.reset()"></button>
                   </div>
 
                 </div>
 
               </div>
 
+            </div>
+
+            <div v-if="newBooking.state==='in-form'" class="descriptionInput mt-1 border border-3 border-dark rounded" style="">
+                    <textarea v-model="newBooking.description" type="text" class="form-control form-control-sm"
+                              placeholder="Description (optional)"
+                              style="z-index:40;position:relative;font-size:10pt;">
+                    </textarea>
             </div>
 
           </div>
@@ -531,8 +543,8 @@ document.addEventListener('keyup', (e) => {
 </template>
 
 <style scoped lang="scss">
-    $highlightColor: hsl(348, 100%, 61%);
-    $dayColumnWidth: calc(100% * (10 / (12 * 7)));
+$highlightColor: hsl(348, 100%, 61%);
+$dayColumnWidth: calc(100% * (10 / (12 * 7)));
 
 .outerWrapper {
   user-select: none;
@@ -543,6 +555,7 @@ document.addEventListener('keyup', (e) => {
     position: sticky;
     top: 0;
     z-index: 50;
+    border-radius: 5px;
 
     .controls {
       max-width: calc(min(96vw, 1200px));
@@ -567,7 +580,6 @@ document.addEventListener('keyup', (e) => {
       width: calc(100% * 10 / 12 + 1vw);
       left: calc(100% / 12 - 0.5vw);
     }
-
 
 
     .dayColumn {
@@ -614,7 +626,6 @@ document.addEventListener('keyup', (e) => {
           .confirmButtons {
             position: relative;
             z-index: 40;
-            cursor: pointer;
           }
 
         }
