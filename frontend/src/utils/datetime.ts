@@ -30,6 +30,9 @@ export function getTimeString(time: Temporal.PlainTime, format24h: boolean = tru
     } else {
         let ending = time.hour < 12 ? "AM" : "PM"
         let h = (time.hour > 12 ? (time.hour - 12) : time.hour).toString()
+        if (time.minute === 0) {
+            return `${h} ${ending}`
+        }
         return `${h}:${time.minute.toLocaleString('en-us', {minimumIntegerDigits: 2})} ${ending}`
     }
 }

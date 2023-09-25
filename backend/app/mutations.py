@@ -14,6 +14,7 @@ class CreateBooking(graphene.Mutation):
         description = graphene.String(required=False)
 
     def mutate(self, info, date, start_time, end_time, user_id, court_id, description=''):
+        print(info.context.user)
         booking = models.Booking(
             date=date,
             start_time=start_time,

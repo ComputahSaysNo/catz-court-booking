@@ -10,8 +10,6 @@ import {ALL_BOOKINGS, ALL_COURTS} from "@/queries";
 import {getMonday, getWeek, isToday, getTimeString} from "@/utils/datetime";
 import type {Court, Booking} from "@/types"
 
-// components
-import BookingModal from "@/components/BookingModal.vue"
 
 // stores
 import {useUserStore} from "@/stores/user";
@@ -33,8 +31,8 @@ const months = ["January", "February", "March", "April", "May", "June", "July", 
 
 // graphics options
 const hourGapPx = 80 // height of one hour
-const initialOffsetPx = 120 // probably can refactor this one into a css margin - stops the controls overlapping with the calendar
-const lineOverlap = 40 // the amount the vertical lines extend past the top and bottom
+
+const vLineOverflowPx = 100 // the amount the vertical lines extend past the top and bottom
 
 
 // TODO: move both of these to per-court parameters
@@ -143,12 +141,14 @@ const timeLabels = computed<Temporal.PlainTime[]>(() => { // list (of Temporal.P
 
 // Pass this as the top: parameter in CSS to set an event at the right height
 function getTimeOffsetPx(time: Temporal.PlainTime): number {
-  return hourGapPx * ((time.hour - activeCourtOpeningTime.value.hour) + (time.minute - activeCourtOpeningTime.value.minute) / 60) + initialOffsetPx
+  return hourGapPx * ((time.hour - activeCourtOpeningTime.value.hour) + (time.minute - activeCourtOpeningTime.value.minute) / 60)
 }
 
 // Given an OffsetY (coord within parent element, easy to get from MouseEvent), works out the corresponding time
+// Also rounds to the given increment
+
 function getTimeFromOffsetY(offsetY: number, round: number = increment.minutes): Temporal.PlainTime {
-  let hourFractional = ((offsetY - lineOverlap) / hourGapPx) + activeCourtOpeningTime.value.hour
+  let hourFractional = ((offsetY - vLineOverflowPx) / hourGapPx) + activeCourtOpeningTime.value.hour
   let hourInt = Math.floor(hourFractional)
   let minutes = Math.round(((60 * (hourFractional - hourInt)) / round)) * round
   if (minutes === 60) {
@@ -255,6 +255,7 @@ function calendarMouseDown(day: Temporal.PlainDate, e: MouseEvent) {
     newBooking.startTime = proposedStartTime
     newBooking.endTime = proposedStartTime.add(minBooking)
     newBooking.date = day
+    bookingStartIndicator.value.visible = false
   }
 }
 
@@ -267,31 +268,33 @@ function calendarMouseUp() {
 
 const bookingStartIndicator = ref({day: today, time: activeCourtOpeningTime.value, visible: false})
 
-function calendarMouseMove(e: MouseEvent) {
+function calendarMouseMove(day: Temporal.PlainDate, e: MouseEvent) {
+  const newTime = getTimeFromOffsetY(e.offsetY)
+
+  // if user is making a new booking, try to update the end time
   if (newBooking.state === "mouse-down") {
-    let proposedEndTime = getTimeFromOffsetY(e.offsetY)
-    if (proposedEndTime === newBooking.endTime) {
+
+    // skip if we've not moved the end time (which, due to time increment rounding to 30 min, is true for the majority of mouse events)
+    if (newTime.equals(newBooking.endTime!)) {
       return
-    } // skip if we've not moved the end time (saves computing on a lot of mouse events)
-    if (isValidEndTime(proposedEndTime, newBooking.startTime!, newBooking.date!)) {
-      newBooking.endTime = proposedEndTime
+    }
+
+    if (isValidEndTime(newTime, newBooking.startTime!, newBooking.date!)) {
+      newBooking.endTime = newTime
+    }
+  }
+
+  // otherwise update the start time indicator
+  if (newBooking.state === "idle" && currentUser.isAuthenticated) {
+    if (isValidStartTime(newTime, day)) {
+      if (!bookingStartIndicator.value.time.equals(newTime) || !bookingStartIndicator.value.day.equals(day)) {
+        bookingStartIndicator.value.time = newTime
+        bookingStartIndicator.value.day = day
+        bookingStartIndicator.value.visible = true
+      }
     }
   }
 }
-
-const shiftPressed = ref(false)
-
-document.addEventListener('keydown', (e) => {
-  if (e.key === "Shift") {
-    shiftPressed.value = true
-  }
-})
-
-document.addEventListener('keyup', (e) => {
-  if (e.key === "Shift") {
-    shiftPressed.value = false
-  }
-})
 
 document.addEventListener('keyup', (e) => {
   if (e.key === "Escape") {
@@ -302,254 +305,335 @@ document.addEventListener('keyup', (e) => {
 </script>
 
 <template>
-  <div class="wrapper my-4 container-fluid bg-white pb-5 card px-0">
-    <!-- actions bar -->
-    <div class="controls container-fluid card bg-light border-dark border-3 p-2 mt-5">
-      <div class="row justify-content-end">
-        <div class="col-4 my-auto">
-          <div class="row">
-            <div class="col-7">
-              <select class="form-select" v-model="activeCourtId">
+  <div class="outerWrapper container-fluid card pb-5 px-0">
+
+    <!-- Sticky top section with calendar controls and date labels -->
+    <div class="top bg-white mb-2">
+
+      <div class="controls container-fluid card bg-light my-5">
+        <div class="row justify-content-end">
+          <div class="col-4 my-auto">
+            <div class="input-group">
+              <span class="input-group-text text-bg-dark">Court: </span>
+              <select class="form-select form-control" v-model="activeCourtId" style="max-width: 250px">
                 <option v-for="court in allCourts" :value="court.id">{{ court.name }}</option>
               </select>
             </div>
-            <div class="col-5">
-              <button v-if="!firstDisplayedDay.equals(getMonday(today))" class="btn btn-outline-primary"
-                      @click="jumpViewToThisWeek">Jump to today
-              </button>
-            </div>
           </div>
-
-        </div>
-        <div class="col-4 text-center">
-          <div class="btn-group mx-0">
-            <button class="btn" @click="shiftViewByNumDays(-1)" @click.shift="shiftViewByNumDays(-7)">
-              <i class="bi fs-3" :class="shiftPressed ? 'bi-chevron-double-left' : 'bi-chevron-left'"></i>
-            </button>
-            <button class="btn fs-5" style="min-width: 200px">
+          <div class="col-4 text-center">
+            <div class="btn-group mx-0">
+              <button class="btn" @click="shiftViewByNumDays(-7)">
+                <i class="bi bi-chevron-left fs-3"></i>
+              </button>
+              <button class="btn fs-5 fw-bold" style="min-width: 200px">
                 <span v-if="displayedWeek[0].month ===  displayedWeek[6].month">
                 {{ months[firstDisplayedDay.month - 1] }}
               </span>
-              <span v-else>
+                <span v-else>
                 {{ monthsShort[firstDisplayedDay.month - 1] }}
                 <span v-if="displayedWeek[0].year !== displayedWeek[6].year">{{ displayedWeek[0].year }}</span>
                 - {{ monthsShort[displayedWeek[6].month - 1] }}
               </span>
-              <span> {{ " " + displayedWeek[6].year }}</span>
-            </button>
-            <button class="btn" @click="shiftViewByNumDays(1)" @click.shift="shiftViewByNumDays(7)">
-              <i class="bi fs-3" :class="shiftPressed ? 'bi-chevron-double-right' : 'bi-chevron-right'"></i>
+                <span> {{ " " + displayedWeek[6].year }}</span>
+              </button>
+              <button class="btn" @click="shiftViewByNumDays(7)">
+                <i class="bi bi-chevron-right fs-3"></i>
+              </button>
+            </div>
+
+          </div>
+          <div class="col-4 my-auto">
+            <button v-if="!(firstDisplayedDay.equals(getMonday(today)))" class="btn btn-primary float-end"
+                    @click="jumpViewToThisWeek">Jump to this week
             </button>
           </div>
-
-        </div>
-        <div class="col-4 my-auto">
-          <button class="btn btn-danger float-end" data-bs-toggle="modal"
-                  data-bs-target="#bookingModal">New booking
-          </button>
         </div>
       </div>
+
+
+      <div class="dayLabels container-fluid">
+        <div class="row g-0">
+          <div class="col-1"></div>
+          <div class="col" v-for="day in displayedWeek">
+            <div class="dayLabel position-relative text-center"
+                 :class="{'text-danger': isToday(day), 'fw-bold': isToday(day)}">
+              <span class="fs-6">{{ daysShort[day.dayOfWeek - 1].toUpperCase() }} </span>
+              <p class="fs-3 mb-0">{{ day.day }}</p></div>
+          </div>
+          <div class="col-1"></div>
+        </div>
+      </div>
+
     </div>
 
-    <!-- calendar -->
-    <div class="outer-container container-fluid" :style="{height: totalHeight + hourGapPx + 'px'}">
+    <!-- Calendar body-->
+    <div class="main container-fluid" :style="{height: totalHeight + hourGapPx + 'px'}">
 
+      <!-- Everything is in this row, with structure col-1 | (col) x 7 | col-1 -->
       <div class="row g-0">
+
+        <!-- Horizontal lines-->
         <div class="hLine" v-for="time in timeLabels" :style="{top: getTimeOffsetPx(time) + 'px'}"></div>
+
+        <!-- Time labels-->
         <div class="col-1">
           <div class="timeLabel" v-for="time in timeLabels" :style="{top: getTimeOffsetPx(time) + 'px'}">
             {{ getTimeString(time, settings.timeFormat24h) }}
           </div>
         </div>
-        <div class="col" v-for="day in displayedWeek">
-          <div class="position-relative text-center" :class="{'text-danger': isToday(day), 'fw-bold': isToday(day)}"
-               :style="{top: `calc( ${initialOffsetPx}px - 100%)`}">
-            <span class="fs-6">{{ daysShort[day.dayOfWeek - 1].toUpperCase() }} </span>
-            <p class="fs-3">{{ day.day }}</p></div>
-          <div class="vLine bookingArea" @mousedown="calendarMouseDown(day, $event)"
-               @mousemove="calendarMouseMove($event)"
+
+        <!-- Column containing bookings. Borders provide the vertical lines and can be highlighted for current day -->
+        <div class="col dayColumn" v-for="(columnDay, index) in displayedWeek">
+
+          <div class="inner"
+               @mousedown="calendarMouseDown(columnDay, $event)"
+               @mousemove="calendarMouseMove(columnDay, $event)"
                @mouseup="calendarMouseUp()"
-               :style="{top: initialOffsetPx - lineOverlap + 'px', height: totalHeight - initialOffsetPx + 4 * lineOverlap + 'px', cursor: newBooking.state === 'mouse-down' ? 'ns-resize' : newBooking.state === 'idle' ? 'grab' : 'default'}"></div>
-          <div class="vLine"
-               :style="{top: initialOffsetPx - lineOverlap + 'px', height: totalHeight - initialOffsetPx + 2 * lineOverlap + 'px'}"
-               :class="{vLineHighlight: isToday(day)}"></div>
-          <div class="booking-container px-1"
-               v-for="booking in displayedBookings.filter(b => Temporal.PlainDate.from(b.date).equals(day))"
-               :style="{top: getTimeOffsetPx(Temporal.PlainTime.from(booking.startTime)) + 'px', height: getTimeOffsetPx(Temporal.PlainTime.from(booking.endTime)) - getTimeOffsetPx(Temporal.PlainTime.from(booking.startTime)) + 'px'}">
+               :style="{top: `${-vLineOverflowPx}px`, height: `${totalHeight + 2 * vLineOverflowPx}px`,
+                        cursor: newBooking.state === 'mouse-down' ? 'ns-resize' : newBooking.state === 'idle' ? 'grab' : 'default'}"
+               :class="{borderHighlight: isToday(columnDay), last: index===7-1}">
+          </div> <!--overflows a bit past totalHeight to make the vertical lines extend past the top a little -->
+
+          <!-- Bookings. Set height and vertical position using the functions in <script>, based on its start/end time -->
+          <div class="bookingContainer px-1"
+               v-for="booking in displayedBookings.filter(b => Temporal.PlainDate.from(b.date).equals(columnDay))"
+               :style="{top: `${getTimeOffsetPx(Temporal.PlainTime.from(booking.startTime))}px`,
+                        height: `${getTimeOffsetPx(Temporal.PlainTime.from(booking.endTime)) - getTimeOffsetPx(Temporal.PlainTime.from(booking.startTime))}px`}">
+
             <div class="booking card"
-                 :class="currentUser.user?.id == booking.user.id ? 'bg-success-subtle' : 'bg-dark-subtle'">
-              <div class="card-body p-1 d-flex flex-column justify-content-between"
-              >
-                <div style="font-size: 11pt">
-                  <div class="mb-1">
-                    <span class="fw-bold">{{
-                        getTimeString(Temporal.PlainTime.from(booking.startTime), settings.timeFormat24h)
-                      }} - {{ getTimeString(Temporal.PlainTime.from(booking.endTime), settings.timeFormat24h) }}</span>
-                    <button v-if="currentUser.user?.id === booking.user.id" class="btn-close float-end"
-                            style="font-size: 10pt;"></button>
-                  </div>
-                  <p class="mb-0">{{ booking.description }}</p>
-                </div>
-                <div style="font-size: 9pt; line-height: 1em;">
-                  <p class="mb-1 fst-italic"><i class="bi bi-person-fill"></i>
-                    {{ booking.user.firstName + " " + booking.user.lastName }} <span
-                        class="font-monospace fst-normal text-primary">({{
-                        currentUser.user?.id === booking.user.id ? 'you' : booking.user.email.split('@')[0]
-                      }})</span>
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="booking-container px-1"
-               v-if="newBooking.state !== 'idle' && newBooking.date!.equals(day)"
-               :style="{top: getTimeOffsetPx(newBooking.startTime!) + 'px', height: getTimeOffsetPx(newBooking.endTime!) - getTimeOffsetPx(newBooking.startTime!) + 'px'}">
-            <div class="tempBooking card bg-info-subtle py-0 px-1 is-bold  border-test">
+                 :class="currentUser.user?.id === booking.user.id ? 'bg-success-subtle' : 'bg-dark-subtle'">
+
               <div class="card-body p-1 d-flex flex-column justify-content-between">
-                <div class="fw-bold fs-6 text-center">{{ getTimeString(newBooking.startTime!, settings.timeFormat24h) }}
+
+                <div> <!-- At the top of the card: Time, description, close button -->
+
+                  <div class="mb-1">
+
+                    <span class="fw-bold">
+                      {{ getTimeString(Temporal.PlainTime.from(booking.startTime), settings.timeFormat24h) }}
+                      -
+                      {{ getTimeString(Temporal.PlainTime.from(booking.endTime), settings.timeFormat24h) }}
+                    </span>
+
+                    <!-- Delete button IF this is the logged in user's booking (action will also be validated in backend) -->
+                    <button v-if="currentUser.user?.id === booking.user.id"
+                            class="deleteButton btn-close float-end">
+                    </button>
+                  </div>
+
+                  <p class="mb-0">{{ booking.description }}</p>
+
+                </div>
+
+                <!-- At the bottom: name, email -->
+                <div style="font-size: 9pt; line-height: 1em;">
+
+                  <p class="mb-1 fst-italic">
+
+                    <i class="bi bi-person-fill"></i>
+                    {{ booking.user.firstName + " " + booking.user.lastName }}
+                    <span class="font-monospace fst-normal text-primary">
+                      ({{ currentUser.user?.id === booking.user.id ? 'you' : booking.user.email.split('@')[0] }})
+                    </span>
+
+                  </p>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+          <!-- New booking indicator. Calculate height/position in the same way as the actual bookings -->
+          <div class="bookingContainer px-1"
+               v-if="newBooking.state !== 'idle' && newBooking.date!.equals(columnDay)"
+               :style="{top: getTimeOffsetPx(newBooking.startTime!) + 'px',
+                        height: getTimeOffsetPx(newBooking.endTime!) - getTimeOffsetPx(newBooking.startTime!) + 'px'}">
+
+            <div class="newBooking card bg-warning-subtle py-0 px-1 is-bold  border-dash-animation">
+
+              <div class="card-body py-1 px-0 d-flex flex-column justify-content-between">
+
+                <!-- Top -->
+                <div class="fw-bold fs-6 text-center">
+                  <!-- Ok to non-null assert these due to the v-if in bookingContainer -->
+                  {{ getTimeString(newBooking.startTime!, settings.timeFormat24h) }}
                   -
                   {{ getTimeString(newBooking.endTime!, settings.timeFormat24h) }}
                 </div>
+
+                <!-- Bottom -->
                 <div class="align-self-center text-center fw-bold" v-if="newBooking.state==='mouse-down'">
+
                   <p class="mb-0">release to confirm</p>
                   <p>hit <span class="text-danger bg-light p-1 rounded">esc</span> to cancel</p>
-                  <i class="bi bi-arrow-down fs-3" style="line-height: 0;"></i>
                 </div>
-                <div class="align-self-center" v-if="newBooking.state==='in-form'">
-                  <div class="confirmButtons mb-2">
-                    <i class="bi bi-check2 fs-4 bg-success rounded px-1 mx-2 text-white"></i>
-                    <i class="bi bi-x-lg fs-4 bg-danger rounded px-1 mx-2 text-white" @click="newBooking.reset()"></i>
+
+                <!-- Confirmation dialog after user releases mouse -->
+                <div class="" v-if="newBooking.state==='in-form'">
+
+                  <div class="confirmButtons mb-2 d-flex justify-content-evenly">
+                    <i class="bi bi-check2 fs-4 bg-success rounded px-2 text-white"></i>
+                    <i class="bi bi-x-lg fs-4 bg-danger rounded px-2 text-white" @click="newBooking.reset()"></i>
                   </div>
+
                 </div>
+
               </div>
+
             </div>
+
           </div>
+
+          <!-- indicator displaying the current time on the calendar area. Currently ISN'T reactive to reduce performance impact -->
           <div class="currTimeLine"
-               v-if="isToday(day) && Temporal.PlainTime.compare(activeCourtOpeningTime, now) <= 0 && Temporal.PlainTime.compare(activeCourtClosingTime, now) >= 0"
+               v-if="isToday(columnDay) && Temporal.PlainTime.compare(activeCourtOpeningTime, now) <= 0 && Temporal.PlainTime.compare(activeCourtClosingTime, now) >= 0"
                :style="{top: getTimeOffsetPx(now) + 'px'}">
           </div>
+
+          <!-- shows if the user can make a booking from where their cursor is currently -->
+          <div class="startBookingLine text-center"
+               v-if="currentUser.isAuthenticated && bookingStartIndicator.visible && newBooking.state==='idle' && columnDay.equals(bookingStartIndicator.day)"
+               :style="{top: getTimeOffsetPx(bookingStartIndicator.time) + 'px'}">
+            <i class="bi bi-arrow-down position-relative fs-2" style="top: 0;"></i>
+          </div>
+
         </div>
+
+        <!-- Right-hand time labels -->
         <div class="col-1">
-          <div class="vLine end"
-               :style="{top: initialOffsetPx - lineOverlap + 'px', height: totalHeight - initialOffsetPx + 2 * lineOverlap + 'px'}"></div>
+
           <div class="timeLabel" v-for="time in timeLabels" :style="{top: getTimeOffsetPx(time) + 'px'}">
             {{ getTimeString(time, settings.timeFormat24h) }}
           </div>
+
         </div>
+
       </div>
+
     </div>
-    <BookingModal id="bookingModal"></BookingModal>
+
   </div>
+
 </template>
 
-<style scoped>
-.hLine {
-  position: absolute;
-  border-bottom: 1px dashed #c1c1c1;
-  width: calc(100% * 10 / 12 + 1vw);
-  left: calc(100% / 12 - 0.5vw);
-}
+<style scoped lang="scss">
+    $highlightColor: hsl(348, 100%, 61%);
+    $dayColumnWidth: calc(100% * (10 / (12 * 7)));
 
-.vLine {
-  position: absolute;
-  border-left: 1px solid grey;
-  border-right: none;
-  width: calc(100% * (10 / (12 * 7)));
-}
-
-.end {
-  width: auto;
-}
-
-.bookingArea {
-  border: none;
-  z-index: 20;
-  background: transparent;
-}
-
-.vLineHighlight {
-  border-right: solid;
-  border-color: hsl(348, 100%, 61%);
-  border-width: 3px;
-  width: calc(100% * (10 / (12 * 7)));
-  z-index: 1;
-}
-
-.timeLabel {
-  position: absolute;
-  transform: translate(0, -0.7em);
-  text-align: center;
-  width: calc(100% / 12);
-}
-
-.booking {
-  height: 100%;
-  line-height: 0.9em;
-}
-
-.booking-form {
-  max-width: 400px;
-}
-
-.tempBooking {
-  height: 100%;
-  border-style: dashed;
-  font-size: 10pt;
-}
-
-.is-bold {
-  font-weight: bold;
-}
-
-.currTimeLine {
-  width: calc(100% * (10 / (12 * 7)));
-  position: absolute;
-  border-bottom: 4px solid hsl(204, 86%, 53%);
-}
-
-.outer-container {
-  position: relative;
-}
-
-.booking-container {
-  position: absolute;
-  width: calc(100% * (10 / (12 * 7)) - 2px);
-}
-
-.wrapper {
+.outerWrapper {
   user-select: none;
   max-width: 1500px;
   min-width: 1000px;
+
+  .top {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+
+    .controls {
+      max-width: calc(min(96vw, 1200px));
+
+    }
+
+  }
+
+  .main {
+    position: relative;
+
+    .timeLabel {
+      position: absolute;
+      transform: translate(0, -0.7em);
+      text-align: center;
+      width: calc(100% / 12);
+    }
+
+    .hLine {
+      position: absolute;
+      border-bottom: 1px dashed #c1c1c1;
+      width: calc(100% * 10 / 12 + 1vw);
+      left: calc(100% / 12 - 0.5vw);
+    }
+
+
+
+    .dayColumn {
+      .inner {
+        position: absolute;
+        width: $dayColumnWidth;
+        border-left: 1px solid grey;
+        z-index: 10;
+
+
+      }
+
+      .last {
+        border-right: 1px solid grey;
+      }
+
+      .borderHighlight {
+        border-left: 3px solid $highlightColor;
+        border-right: 3px solid $highlightColor;
+        z-index: 20;
+      }
+
+      .bookingContainer {
+        position: absolute;
+        width: calc($dayColumnWidth - 2px);
+
+        .booking {
+          height: 100%;
+          line-height: 0.9em;
+          font-size: 11pt;
+
+          .deleteButton {
+            position: relative;
+            z-index: 40;
+            font-size: 10pt;
+          }
+        }
+
+        .newBooking {
+          height: 100%;
+          font-size: 10pt;
+
+
+          .confirmButtons {
+            position: relative;
+            z-index: 40;
+            cursor: pointer;
+          }
+
+        }
+      }
+
+      .currTimeLine {
+        width: calc(100% * (10 / (12 * 7)));
+        position: absolute;
+        border-bottom: 4px solid $highlightColor;
+      }
+
+      .startBookingLine {
+        width: calc($dayColumnWidth - 2px);
+        position: absolute;
+        border-top: 2px solid black;
+      }
+    }
+
+
+  }
+
 }
 
-.btn-close {
-  position: absolute;
-  z-index: 50;
-  top: 0.2em;
-  right: 0.2em;
-}
 
-.confirmButtons {
-  position: relative;
-  z-index: 50;
-  cursor: pointer;
-}
-
-.controls {
-  position: sticky;
-  top: 50px;
-  z-index: 50;
-  max-width: calc(min(100vw, 1200px));
-  right: 0;
-  left: 0;
-}
-
-.border-test {
-  background-image: linear-gradient(90deg, #1350ef 50%, transparent 50%), linear-gradient(90deg, #1350ef 50%, transparent 50%), linear-gradient(0deg, #1350ef 50%, transparent 50%), linear-gradient(0deg, #1350ef 50%, transparent 50%);
+.border-dash-animation {
+  background-image: linear-gradient(90deg, black 50%, transparent 50%), linear-gradient(90deg, black 50%, transparent 50%), linear-gradient(0deg, black 50%, transparent 50%), linear-gradient(0deg, black 50%, transparent 50%);
   background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
   background-size: 30px 3px, 30px 3px, 3px 30px, 3px 30px;
   background-position: left top, right bottom, left bottom, right top;
-  animation: border-dance 0.3s infinite linear;
+  animation: border-dance 0.5s infinite linear;
 }
 
 @keyframes border-dance {
