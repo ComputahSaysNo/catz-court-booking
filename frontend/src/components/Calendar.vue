@@ -38,6 +38,7 @@ const vLineOverflowPx = 40 // the amount the vertical lines extend past the top 
 // TODO: move both of these to per-court parameters
 // TODO: add max booking length
 const minBooking = Temporal.Duration.from({hours: 0, minutes: 60})
+const maxBooking = Temporal.Duration.from({hours: 3, minutes: 0})
 const increment = Temporal.Duration.from({hours: 0, minutes: 30})
 
 // Queries =============================================================================================================
@@ -203,20 +204,25 @@ function isValidEndTime(endTime: Temporal.PlainTime, startTime: Temporal.PlainTi
     return false
   }
 
-  // 2. return false if the resultant booking is shorter than the minimum booking
+  // 2. return false if the booking is too long
+  if (Temporal.Duration.compare(startTime.until(endTime), maxBooking) > 0) {
+    return false
+  }
+
+  // 3. return false if the resultant booking is shorter than the minimum booking
   if (Temporal.Duration.compare(startTime.until(endTime), minBooking) < 0) {
     return false
   }
 
-  // 2. work out when the latest the end time could be is
+  // 4. work out when the latest the end time could be is
   const limit = getLatestEndTime(startTime, day)
 
-  // 3. return false if the end time is past this limit
+  // 5. return false if the end time is past this limit
   if (Temporal.PlainTime.compare(endTime, limit) > 0) {
     return false
   }
 
-  // 4. otherwise, we're good
+  // 6. otherwise, we're good
   return true
 
 }
@@ -308,7 +314,7 @@ document.addEventListener('keyup', (e) => {
 </script>
 
 <template>
-  <div class="outerWrapper container-fluid card pb-5 px-0 my-4">
+  <div class="outerWrapper container-fluid card pb-5 px-0 my-4" @mouseup="calendarMouseUp">
 
     <!-- Sticky top section with calendar controls and date labels -->
     <div class="top bg-white mb-2">
@@ -382,7 +388,7 @@ document.addEventListener('keyup', (e) => {
 
     <!-- Calendar body-->
     <div class="main container-fluid" :style="{height: totalHeight + hourGapPx + 'px'}"
-         @mouseout="bookingStartIndicator.visible=false">
+         @mouseout="()=>{bookingStartIndicator.visible=false}">
 
       <!-- Everything is in this row, with structure col-1 | (col) x 7 | col-1 -->
       <div class="row g-0">
@@ -404,7 +410,6 @@ document.addEventListener('keyup', (e) => {
                @mousedown="calendarMouseDown(columnDay, $event)"
                @mousemove="calendarMouseMove(columnDay, $event)"
                @mouseup="calendarMouseUp()"
-               @mouseout="calendarMouseUp()"
                :style="{top: `${-vLineOverflowPx}px`, height: `${totalHeight + 2 * vLineOverflowPx}px`,
                         cursor: !currentUser.isAuthenticated ? 'default' : newBooking.state === 'mouse-down' ? 'ns-resize' : newBooking.state === 'idle' ? 'grab' : 'default'}"
                :class="{borderHighlight: isToday(columnDay), last: index===7-1}">
@@ -478,14 +483,18 @@ document.addEventListener('keyup', (e) => {
                   {{ getTimeString(newBooking.startTime!, settings.timeFormat24h) }}
                   -
                   {{ getTimeString(newBooking.endTime!, settings.timeFormat24h) }}
+                  <p v-if="Temporal.Duration.compare(newBooking.duration!, maxBooking)===0 && newBooking.state==='mouse-down'" class="small text-danger">
+                    max booking length: {{maxBooking.hours}}h<span v-if="maxBooking.minutes!==0">{{maxBooking.minutes}}m</span>
+                  </p>
                 </div>
 
                 <!-- Bottom -->
                 <div class="align-self-center text-center fw-bold" v-if="newBooking.state==='mouse-down'">
 
-                  <p class="mb-0">release to confirm</p>
-                  <p>hit <span class="text-danger bg-light p-1 rounded">esc</span> to cancel</p>
+                  <p class="mb-0">drag down to set time </p>
+                  <p class="mb-2">or hit <span class="text-danger bg-light p-1 rounded">esc</span> to cancel</p>
                 </div>
+
 
                 <!-- Confirmation dialog after user releases mouse -->
                 <div v-if="newBooking.state==='in-form'">
@@ -501,7 +510,8 @@ document.addEventListener('keyup', (e) => {
 
             </div>
 
-            <div v-if="newBooking.state==='in-form'" class="descriptionInput mt-1 border border-3 border-dark rounded" style="">
+            <div v-if="newBooking.state==='in-form'" class="descriptionInput mt-1 border border-3 border-dark rounded"
+                 style="">
                     <textarea v-model="newBooking.description" type="text" class="form-control form-control-sm"
                               placeholder="Description (optional)"
                               style="z-index:40;position:relative;font-size:10pt;">
@@ -634,6 +644,7 @@ $dayColumnWidth: calc(100% * (10 / (12 * 7)));
       .currTimeLine {
         width: calc(100% * (10 / (12 * 7)));
         position: absolute;
+        z-index: 0;
         border-bottom: 4px solid $highlightColor;
       }
 
