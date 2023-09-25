@@ -311,7 +311,9 @@ document.addEventListener('keyup', (e) => {
     <div class="top bg-white mb-2">
 
       <div class="controls container-fluid card bg-light my-5">
+
         <div class="row justify-content-end">
+
           <div class="col-4 my-auto">
             <div class="input-group">
               <span class="input-group-text text-bg-dark">Court: </span>
@@ -320,6 +322,7 @@ document.addEventListener('keyup', (e) => {
               </select>
             </div>
           </div>
+
           <div class="col-4 text-center">
             <div class="btn-group mx-0">
               <button class="btn" @click="shiftViewByNumDays(-7)">
@@ -340,28 +343,36 @@ document.addEventListener('keyup', (e) => {
                 <i class="bi bi-chevron-right fs-3"></i>
               </button>
             </div>
-
           </div>
+
           <div class="col-4 my-auto">
             <button v-if="!(firstDisplayedDay.equals(getMonday(today)))" class="btn btn-primary float-end"
                     @click="jumpViewToThisWeek">Jump to this week
             </button>
           </div>
+
         </div>
+
       </div>
 
 
       <div class="dayLabels container-fluid">
+
         <div class="row g-0">
+
           <div class="col-1"></div>
+
           <div class="col" v-for="day in displayedWeek">
             <div class="dayLabel position-relative text-center"
                  :class="{'text-danger': isToday(day), 'fw-bold': isToday(day)}">
               <span class="fs-6">{{ daysShort[day.dayOfWeek - 1].toUpperCase() }} </span>
               <p class="fs-3 mb-0">{{ day.day }}</p></div>
           </div>
+
           <div class="col-1"></div>
+
         </div>
+
       </div>
 
     </div>
