@@ -30,44 +30,60 @@ const monthsShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Se
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 
 
-// graphics options
+// Graphics helpers ====================================================================================================
 
 
-const vLineOverflowPx = 40 // the amount the vertical lines extend past the top and bottom
+const vLineOverflowPx = 40 // the amount the vertical lines extend past the top and bottom (this affects offsetY of mouseEvents)
+const mobileBreakpointPx = 1000 // At screen widths less than this the app uses the mobile layout
 
-const dayColumnWidth = "calc(100% * (10 / (12 * 7)))"
-const dayColumnWidthMobile = "calc(100% * (11 / (12 * 7)))" // right hand side time labels are hidden on mobile to save space
-const dayColumnWidthHighlight = "calc(100% * (10 / (12 * 7)) + 1px)"
-const dayColumnWidthMobileHighlight = "calc(100% * (11 / (12 * 7)) + 1px)"
-
-const hLineWidth = "calc(100% * (10/12) + 2vw)"
-const hLineWidthMobile = "calc(100% * (11/12) + 2vw)"
-
-const increment = Temporal.Duration.from({hours: 0, minutes: 30})
-
+// keep track of the window width if it resizes
 const windowWidth = ref(window.innerWidth)
+const updateWidth = () => windowWidth.value = window.innerWidth
 
 onMounted(() => {
-  window.addEventListener('resize', () => windowWidth.value = window.innerWidth)
+  window.addEventListener('resize', updateWidth)
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', () => windowWidth.value = window.innerWidth)
+  window.removeEventListener('resize', updateWidth)
 })
 
-const mobile = computed(() => windowWidth.value < 1000)
-const dayLabels = computed(() => mobile.value ? daysInitial : daysShort)
 
-const hourGapPx = computed(()=>mobile.value ? 50 : 80)
+// This is used frequently in the HTML to dynamically decide which layout to use
+const mobile = computed<boolean>(() => windowWidth.value < mobileBreakpointPx)
+
+// Column layout (desktop):
+// TimeLabels(col-1) | Mon Tue Wed Thu Fri Sat Sun | TimeLabels(col-1)
+// So each of the day columns has width 1/7 * 10/12  (Bootstrap col-1 is 1/12 of the row width)
+
+// Column layout (mobile):
+// TimeLabels(col-1) | M T W T F S S
+// So each of the day columns has width 1/7 & 11/12
+
+const dayColumnWidth = "calc(100% * (10 / (12 * 7)))"
+const dayColumnWidthMobile = "calc(100% * (11 / (12 * 7)))" // right hand side time labels are hidden on mobile to save space
+
+// The highlighted column is a little wider, so it covers the border of the adjacent one
+const dayColumnWidthHighlight = "calc(100% * (10 / (12 * 7)) + 1px)"
+const dayColumnWidthMobileHighlight = "calc(100% * (11 / (12 * 7)) + 1px)"
+
+// hLine goes across all the day columns and extends 1vw out into the time labels
+const hLineWidth = "calc(100% * (10/12) + 2vw)"
+const hLineWidthMobile = "calc(100% * (11/12) + 2vw)"
+
+// Some more mobile/desktop specific layout choices
+const dayLabels = computed<string[]>(() => mobile.value ? daysInitial : daysShort) // "Mon Tues Weds..." vs "M T W..." in the top
+const hourGapPx = computed(() => mobile.value ? 50 : 80) // Height of 1 hour on the calendar
+
+// Bookings snap to nearest [increment] minutes
+const increment = Temporal.Duration.from({hours: 0, minutes: 30})
 
 // Queries =============================================================================================================
 // These are executed on component load
 
-
 // 1. Courts
 const q1 = useQuery(ALL_COURTS).result
 const allCourts = computed<Court[]>(() => q1.value?.allCourts ?? []) // is [] until the list loads from server
-
 
 // 2. Bookings
 const q2 = useQuery(ALL_BOOKINGS).result
@@ -97,8 +113,15 @@ const activeCourt = computed<Court | null>(() => {
   }
 })
 
+// select the first court once the data loads from the server
 watch(allCourts, () => {
   activeCourtId.value = allCourts.value[0].id
+})
+
+watch(activeCourtId, () => {
+  // reset any temp booking we've made if the selected court changes
+  newBooking.reset()
+  newBooking.court = activeCourt.value
 })
 
 // GraphQL (and the Court type) store times and dates as strings, so these helper computed properties will save
@@ -145,13 +168,6 @@ const maxAdvance = computed<Temporal.Duration>(() => {
   }
 })
 
-
-watch(activeCourtId, () => {
-  // reset any temp booking we've made if the selected court changes
-  newBooking.reset()
-  newBooking.court = activeCourt.value
-})
-
 // 2. Current week in calendar
 
 const firstDisplayedDay = ref<Temporal.PlainDate>(getMonday(today)) // the leftmost displayed day (initialise to the monday of this week)
@@ -181,6 +197,9 @@ const timeLabels = computed<Temporal.PlainTime[]>(() => { // list (of Temporal.P
     }
 )
 
+// Small indicator on desktop only that shows the user they can start a booking here
+const bookingStartIndicator = ref({day: today, time: activeCourtOpeningTime.value, visible: false})
+
 
 // Calendar display helper functions ===================================================================================
 // These enable click-and-drag event creation
@@ -192,7 +211,6 @@ function getTimeOffsetPx(time: Temporal.PlainTime): number {
 
 // Given an OffsetY (coord within parent element, easy to get from MouseEvent), works out the corresponding time
 // Also rounds to the given increment
-
 function getTimeFromOffsetY(offsetY: number, round: number = increment.minutes): Temporal.PlainTime {
   let hourFractional = ((offsetY - vLineOverflowPx) / hourGapPx.value) + activeCourtOpeningTime.value.hour
   let hourInt = Math.floor(hourFractional)
@@ -212,7 +230,6 @@ const totalHeight = computed<number>(() => getTimeOffsetPx(activeCourtClosingTim
 // For a given start time and day, find the latest that booking could end
 // It's not super optimal to call this on every MouseMove since limit won't change until the start time changes
 // But hopefully the user isn't spamming bookings enough that this is an issue
-
 function getLatestEndTime(startTime: Temporal.PlainTime, day: Temporal.PlainDate): Temporal.PlainTime {
 
   // initialise to the court's closing time
@@ -239,7 +256,6 @@ function getLatestEndTime(startTime: Temporal.PlainTime, day: Temporal.PlainDate
 
 
 // Given a certain start time and day, validate an end time
-
 function isValidEndTime(endTime: Temporal.PlainTime, startTime: Temporal.PlainTime, day: Temporal.PlainDate): boolean {
 
   // 1. return false if the end time is after closing
@@ -297,15 +313,20 @@ function isValidStartTime(startTime: Temporal.PlainTime, day: Temporal.PlainDate
 
 // Event handlers ======================================================================================================
 
+// 1. Mouse events (Desktop). These create the new booking when the user clicks on the calendar
+
 function calendarMouseDown(day: Temporal.PlainDate, e: MouseEvent) {
   if (mobile.value) {
-    return
+    return // Sometimes taps on mobile generate a phantom MouseEvent, we don't want to handle both.
   }
+
   if (!currentUser.isAuthenticated) {
-    // return // must be logged in to make bookings
+    return // must be logged in to make bookings
   }
+
   const proposedStartTime = getTimeFromOffsetY(e.offsetY)
   if (isValidStartTime(proposedStartTime, day)) {
+    // initiate a new booking if the user has chosen a valid start-time
     newBooking.state = "mouse-down"
     newBooking.startTime = proposedStartTime
     newBooking.endTime = proposedStartTime.add(minBooking.value)
@@ -315,12 +336,11 @@ function calendarMouseDown(day: Temporal.PlainDate, e: MouseEvent) {
 }
 
 function calendarMouseUp() {
+  // Stop searching for drags once the user lets go of click
   if (newBooking.state === "mouse-down") {
     newBooking.state = "in-form"
   }
 }
-
-const bookingStartIndicator = ref({day: today, time: activeCourtOpeningTime.value, visible: false})
 
 function calendarMouseMove(day: Temporal.PlainDate, e: MouseEvent) {
   const newTime = getTimeFromOffsetY(e.offsetY)
@@ -339,7 +359,7 @@ function calendarMouseMove(day: Temporal.PlainDate, e: MouseEvent) {
   }
 
   // otherwise update the start time indicator
-  if (newBooking.state === "idle" && currentUser.isAuthenticated) {
+  if (newBooking.state === "idle") {
     if (isValidStartTime(newTime, day)) {
       if (!bookingStartIndicator.value.visible || !bookingStartIndicator.value.time.equals(newTime) || !bookingStartIndicator.value.day.equals(day)) {
         bookingStartIndicator.value.time = newTime
@@ -350,15 +370,19 @@ function calendarMouseMove(day: Temporal.PlainDate, e: MouseEvent) {
   }
 }
 
-let pressTimer: any
+
+// 2. Touch events (mobile). These need separate logic for taps on the calendar body and on the small dot on the new booking
+// since they return the offset in a different way
+
+let pressTimer: any // timer for setTimeout to detect a long press
 
 function calendarTouchStart(day: Temporal.PlainDate, e: TouchEvent) {
   let rect = {x: 0, y: 0}
-  if (e.target instanceof Element) {
+  if (e.target instanceof Element) { // So typescript doesn't scream at me
     rect = e.target!.getBoundingClientRect()
   }
-  const offsetY = e.targetTouches[0].clientY - rect.y
-  pressTimer = window.setTimeout(() => {
+  const offsetY = e.targetTouches[0].clientY - rect.y // Equivalent to offsetY for the mouseEvent
+  pressTimer = window.setTimeout(() => { // setTimeout for 200ms, cancelled by touchmove or touchend, so scrolling doesn't trigger this
     const proposedStartTime = getTimeFromOffsetY(offsetY)
     if (isValidStartTime(proposedStartTime, day)) {
       newBooking.state = "mouse-down"
@@ -367,18 +391,20 @@ function calendarTouchStart(day: Temporal.PlainDate, e: TouchEvent) {
       newBooking.date = day
       bookingStartIndicator.value.visible = false
     }
-  }, 300)
+  }, 200)
 }
 
 function calendarTouchMove(e: TouchEvent) {
   if (newBooking.state !== "mouse-down") {
-    clearTimeout(pressTimer)
+    clearTimeout(pressTimer) // if we're not making a booking, cancel the long-press timer
   } else {
-    e.preventDefault()
+    e.preventDefault() // if we ARE making a booking, don't scroll
     let rect = {x: 0, y: 0}
     if (e.target instanceof Element) {
       rect = e.target!.getBoundingClientRect()
     }
+
+    // otherwise same logic as the MouseEvent handler
     const offsetY = e.targetTouches[0].clientY - rect.y
     const newTime = getTimeFromOffsetY(offsetY)
 
@@ -393,6 +419,7 @@ function calendarTouchMove(e: TouchEvent) {
 }
 
 function calendarTouchEnd() {
+  // Same as MouseEvent but cancels long-press timer if not in a booking
   if (newBooking.state !== "mouse-down") {
     clearTimeout(pressTimer)
   } else {
@@ -400,6 +427,52 @@ function calendarTouchEnd() {
   }
 }
 
+// The dot is used to readjust the end time of a MOBILE booking once the user has let go
+// Presses on the dot need to be handled slightly differently since the offset we need is of a parent element
+
+let dotPressTimer: any
+
+function dotTouchStart() {
+
+  if (newBooking.state === "in-form") {
+    dotPressTimer = window.setTimeout(() => {
+      newBooking.state = "mouse-down"
+    }, 100)
+  }
+}
+
+function dotTouchMove(e: TouchEvent) {
+  if (newBooking.state !== "mouse-down") {
+    clearTimeout(dotPressTimer)
+  } else {
+    e.preventDefault()
+    let rect = {x: 0, y: 0}
+    if (e.target instanceof Element) {
+      rect = e.target!.parentElement!.parentElement!.parentElement!.getBoundingClientRect()
+      const offsetY = e.targetTouches[0].clientY - rect.y + vLineOverflowPx
+      const newTime = getTimeFromOffsetY(offsetY)
+
+      if (newTime.equals(newBooking.endTime!)) {
+        return
+      }
+
+      if (isValidEndTime(newTime, newBooking.startTime!, newBooking.date!)) {
+        newBooking.endTime = newTime
+      }
+    }
+  }
+}
+
+function dotTouchEnd() {
+  if (newBooking.state !== "mouse-down") {
+    clearTimeout(dotPressTimer)
+  } else {
+    newBooking.state = "in-form"
+  }
+}
+
+
+// Desktop: cancel booking if escape is pressed
 document.addEventListener('keyup', (e) => {
   if (e.key === "Escape") {
     newBooking.state = 'idle'
@@ -411,11 +484,13 @@ document.addEventListener('keyup', (e) => {
 
 <template>
 
-  <div class="outerWrapper container-fluid card pb-5 px-0 my-4" @mouseup="calendarMouseUp">
+  <!-- Contains the top section and the main section with a white background and padding -->
+  <div class="outerWrapper container-fluid card pb-3 px-0 my-4" @mouseup="calendarMouseUp">
 
     <!-- Sticky top section with calendar controls and date labels -->
     <div class="top bg-white mb-2">
 
+      <!-- DESKTOP controls section -->
       <div class="controls container-fluid card bg-light my-5" v-if="!mobile">
 
         <div class="row justify-content-end">
@@ -461,7 +536,14 @@ document.addEventListener('keyup', (e) => {
 
       </div>
 
-      <div v-else class="container d-flex flex-row justify-content-center">
+      <!-- MOBILE controls section -->
+      <div v-else class="container d-flex flex-column justify-content-center align-items-center">
+        <div class="input-group mt-4 mb-2 px-3" style="max-width: 300px;">
+          <span class="input-group-text text-bg-dark">Court: </span>
+          <select class="form-select form-control" v-model="activeCourtId">
+            <option v-for="court in allCourts" :value="court.id">{{ court.name }}</option>
+          </select>
+        </div>
         <div class="btn-group mx-0">
           <button class="btn" @click="shiftViewByNumDays(-7)">
             <i class="bi bi-chevron-left fs-3"></i>
@@ -483,6 +565,7 @@ document.addEventListener('keyup', (e) => {
         </div>
       </div>
 
+      <!-- Day labels: Mon Tue Wed etc for desktop, M T W etc for mobile -->
       <div class="dayLabels container-fluid p-0">
 
         <div class="row g-0">
@@ -527,6 +610,7 @@ document.addEventListener('keyup', (e) => {
         <!-- Column containing bookings. Borders provide the vertical lines and can be highlighted for current day -->
         <div class="col dayColumn" v-for="(columnDay, index) in displayedWeek">
 
+          <!-- the parent has zero-width, so we need this element to set the correct column width. All click interactions are done onto this -->
           <div class="inner"
                @touchstart="calendarTouchStart(columnDay, $event)"
                @touchmove="calendarTouchMove($event)"
@@ -553,7 +637,8 @@ document.addEventListener('keyup', (e) => {
 
               <div class="card-body d-flex flex-column justify-content-between" :class="mobile ? 'p-0' : 'p-1'">
 
-                <div> <!-- At the top of the card: Time, description, close button -->
+                <!-- At the top of the card: Time, description, close button -->
+                <div>
 
                   <div class="mb-1">
 
@@ -606,7 +691,8 @@ document.addEventListener('keyup', (e) => {
               <div class="card-body py-1 px-0 d-flex flex-column justify-content-between">
 
                 <!-- Top -->
-                <div class="fw-bold text-center" :style="{'font-size': mobile ? '8pt' : '13pt'}" style="line-height: 1.2em;">
+                <div class="fw-bold text-center" :style="{'font-size': mobile ? '8pt' : '13pt'}"
+                     style="line-height: 1.2em;">
                   <!-- Ok to non-null assert these due to the v-if in bookingContainer -->
                   {{ getTimeString(newBooking.startTime!, settings.timeFormat24h) }}
                   <p v-if="mobile" class="mb-0">to</p><span v-else>-</span>
@@ -626,7 +712,7 @@ document.addEventListener('keyup', (e) => {
 
 
                 <!-- Confirmation dialog after user releases mouse -->
-                <div v-if="newBooking.state==='in-form'" :style="{'font-size': mobile ? '12pt' : '16pt'}">
+                <div v-if="newBooking.state==='in-form' && !mobile" :style="{'font-size': mobile ? '12pt' : '16pt'}">
                   <div class="confirmButtons d-flex justify-content-evenly px-0 mb-2 rounded">
                     <button class="bi bi-check2 bg-success rounded px-2 me-2 text-white"></button>
                     <button class="bi bi-x-lg bg-danger rounded px-2 text-white"
@@ -639,12 +725,26 @@ document.addEventListener('keyup', (e) => {
 
             </div>
 
-            <div v-if="newBooking.state==='in-form' && !mobile" class="descriptionInput mt-1 border border-3 border-dark rounded align-self-center"
+            <!-- Stuff that goes below the new booking container -->
+
+            <!-- Description input for desktop interface, shows once the user has released the drag -->
+            <div v-if="newBooking.state==='in-form' && !mobile"
+                 class="descriptionInput mt-1 border border-3 border-dark rounded align-self-center"
                  style="">
                     <textarea v-model="newBooking.description" type="text" class="form-control form-control-sm"
                               placeholder="Description (optional)"
                               style="z-index:40;position:relative;font-size:10pt;">
                     </textarea>
+            </div>
+
+            <!-- Dot to readjust mobile booking -->
+            <div v-if="mobile"
+                 class="mobileDragDot d-flex justify-content-center align-items-center bg-danger text-white"
+                 @touchstart="dotTouchStart()"
+                 @touchmove="dotTouchMove($event)"
+                 @touchend="dotTouchEnd()">
+              <i class="bi bi-arrows-move"></i>
+
             </div>
 
           </div>
@@ -656,9 +756,9 @@ document.addEventListener('keyup', (e) => {
                         width: mobile ? dayColumnWidthMobile : dayColumnWidth}">
           </div>
 
-          <!-- shows if the user can make a booking from where their cursor is currently -->
+          <!--  (Desktop only) shows if the user can make a booking from where their cursor is currently -->
           <div class="startBookingLine text-center"
-               v-if="currentUser.isAuthenticated && bookingStartIndicator.visible && newBooking.state==='idle' && columnDay.equals(bookingStartIndicator.day)"
+               v-if="!mobile && currentUser.isAuthenticated && bookingStartIndicator.visible && columnDay.equals(bookingStartIndicator.day)"
                :style="{top: getTimeOffsetPx(bookingStartIndicator.time) + 'px',
                         width: mobile ? dayColumnWidthMobile : dayColumnWidth}">
             <i class="bi bi-arrow-down position-relative fs-2" style="top: 0;"></i>
@@ -679,11 +779,30 @@ document.addEventListener('keyup', (e) => {
 
     </div>
 
+
   </div>
+
+  <!-- Mobile only: fixed position description and confirm/cancel buttons after the user has released their drag -->
+  <div v-if="mobile && newBooking.state==='in-form'" class="mobileConfirm d-flex flex-column fs-2">
+    <div class="border border-2 border-dark rounded">
+      <input class="form-control" placeholder="Description (optional)">
+    </div>
+    <div class="align-self-end d-flex flex-row fs-2 mt-1">
+      <div class="action bg-success text-white d-flex justify-content-center align-items-center p-3 me-2">
+        <i class="bi bi-check2"></i>
+      </div>
+      <div class="action bg-danger text-white d-flex justify-content-center align-items-center p-3"
+           @touchend="newBooking.reset()">
+        <i class="bi bi-x-lg"></i>
+      </div>
+    </div>
+  </div>
+
 
 </template>
 
 <style scoped lang="scss">
+
 $highlightColor: hsl(348, 100%, 61%);
 
 $dayColumnWidth: calc(100% * (10 / (12 * 7)));
@@ -795,11 +914,34 @@ $dayColumnWidth: calc(100% * (10 / (12 * 7)));
 
 }
 
+.mobileConfirm {
+  position: fixed;
+  bottom: 10px;
+  right: 20px;
+  z-index: 60;
+
+  .action {
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+  }
+}
+
+.mobileDragDot {
+  position: absolute;
+  z-index: 40;
+  width: 20px;
+  height: 20px;
+  bottom: -10px;
+  left: -10px;
+  border-radius: 50%;
+}
+
 
 .border-dash-animation {
   background-image: linear-gradient(90deg, black 50%, transparent 50%), linear-gradient(90deg, black 50%, transparent 50%), linear-gradient(0deg, black 50%, transparent 50%), linear-gradient(0deg, black 50%, transparent 50%);
   background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
-  background-size: 30px 3px, 30px 3px, 3px 30px, 3px 30px;
+  background-size: 30px 2px, 30px 2px, 2px 30px, 2px 30px;
   background-position: left top, right bottom, left bottom, right top;
   animation: border-dance 0.5s infinite linear;
 }

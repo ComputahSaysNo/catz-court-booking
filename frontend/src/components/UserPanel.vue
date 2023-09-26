@@ -16,7 +16,7 @@ const userBookings = computed<Booking[]>(() => result.value?.bookingsByUser.sort
 </script>
 
 <template>
-  <div v-if="userStore.user" class="container card mt-4 bg-white p-3 rounded">
+  <div v-if="userStore.user" class="container-fluid card mt-4 bg-white p-3 rounded" style="max-width: 1500px">
     <div class="d-flex mb-4">
       <span class="fs-3 me-2">Hello, {{ userStore.user?.firstName }}</span>
       <span class="badge bg-primary mx-1 fs-6 align-self-center font-monospace" v-for="group of userStore.groups">{{ group }}</span>
@@ -25,15 +25,15 @@ const userBookings = computed<Booking[]>(() => result.value?.bookingsByUser.sort
 
     <div v-if="userBookings.length > 0">
       <p class="fs-5">Your upcoming bookings: </p>
-      <div class="d-flex flex-row flex-wrap gap-3 justify-content-center">
-        <div class="p-2 card bg-light" style="line-height: 0.5em; min-width: 200px" v-for="booking in userBookings">
+      <div class="d-flex flex-row flex-wrap gap-3">
+        <div class="p-2 card bg-light" style="line-height: 0.5em; min-width: 180px" v-for="booking in userBookings">
           <div>
             <span class="badge bg-danger fs-6">{{ booking.court.name }}</span>
             <button class="btn-close float-end"></button>
           </div>
           <p class="mt-3 fw-bold">{{
               Temporal.PlainDate.from(booking.date).toLocaleString('en-GB', {
-                weekday: "long",
+                weekday: "short",
                 day: "numeric",
                 month: "numeric"
               }).replace(',', '')
