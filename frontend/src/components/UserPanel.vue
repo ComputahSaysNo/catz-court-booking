@@ -5,6 +5,7 @@ import {BOOKINGS_BY_USER} from "@/queries";
 import {computed} from "vue";
 import type {Booking} from "@/types";
 import {Temporal} from "temporal-polyfill";
+import {getMonday} from "@/utils/datetime";
 
 
 const userStore = useUserStore()
@@ -24,7 +25,7 @@ const userBookings = computed<Booking[]>(() => result.value?.bookingsByUser.sort
 
     <div v-if="userBookings.length > 0">
       <p class="fs-5">Your upcoming bookings: </p>
-      <div class="d-flex flex-row flex-wrap gap-3">
+      <div class="d-flex flex-row flex-wrap gap-3 justify-content-center">
         <div class="p-2 card bg-light" style="line-height: 0.5em; min-width: 200px" v-for="booking in userBookings">
           <div>
             <span class="badge bg-danger fs-6">{{ booking.court.name }}</span>
