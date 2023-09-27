@@ -97,6 +97,7 @@ class CreateBooking(graphene.Mutation):
         booking.save()
         return CreateBooking(booking=booking)
 
+
 class DeleteBooking(graphene.Mutation):
     ok = graphene.Boolean()
 
@@ -104,8 +105,21 @@ class DeleteBooking(graphene.Mutation):
         booking_id = graphene.ID()
 
     def mutate(self, info, booking_id):
-        obj = models.Booking.objects.get(id=booking_id)
-        obj.delete()
+        target = models.Booking.objects.get(id=booking_id)
+
+        def check_authorisation():
+
+            user = info.context.user
+            if not user.is_authenticated:
+                raise PermissionError("You must be logged in to delete a booking")
+
+            user_groups = [g.name.lower() for g in user.groups.all()]
+
+            if target.user.id != user.id and "admin" not in user_groups:
+                raise PermissionError("Non-admins may only delete their own bookings")
+
+        check_authorisation()
+        target.delete()
         return DeleteBooking(ok=True)
 
 
