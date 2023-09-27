@@ -43,7 +43,6 @@ class CreateBooking(graphene.Mutation):
             # Check for overlaps with other bookings on that day and court
             potential_conflicts = models.Booking.objects.filter(court_id=court_id, date=date)
             for potential_conflict in potential_conflicts:
-                print(potential_conflict)
                 # Condition for A to overlap with B is (a.start < b.end) && (a.end > b.start)
                 if (start_time < potential_conflict.end_time) and (end_time > potential_conflict.start_time):
                     raise ValueError("Booking clashes with existing booking: " + str(potential_conflict))
@@ -60,27 +59,28 @@ class CreateBooking(graphene.Mutation):
             if "captain" not in user_groups and "admin" not in user_groups:
 
                 FMT = '%H:%M:%S'
-                duration = datetime.strptime(str(end_time), FMT) - datetime.strptime(str(start_time), FMT)
+                duration_minutes = (datetime.strptime(str(end_time), FMT) -
+                                    datetime.strptime(str(start_time), FMT)).seconds // 60
+
                 court = models.Court.objects.get(id=court_id)
 
-                if court.min_booking_length is not None:
-                    if duration < court.min_booking_length:
+                if court.min_booking_length_minutes is not None:
+                    if duration_minutes < court.min_booking_length_minutes:
                         raise ValueError(
-                            f"Booking is too short: (Duration = {str(duration)} "
-                            f"vs min court booking of {str(court.min_booking_length)}")
+                            f"Booking is too short: (Duration = {str(duration_minutes)} min "
+                            f"vs min court booking of {str(court.min_booking_length_minutes)} min")
 
-                if court.max_booking_length is not None:
-                    if duration > court.max_booking_length:
+                if court.max_booking_length_minutes is not None:
+                    if duration_minutes > court.max_booking_length_minutes:
                         raise ValueError(
-                            f"Booking is too long: (Duration = {str(duration)} "
-                            f"vs max court booking of {str(court.max_booking_length)}")
+                            f"Booking is too long: (Duration = {str(duration_minutes)} min "
+                            f"vs max court booking of {str(court.max_booking_length_minutes)} min")
 
                 if court.max_booking_days_in_advance is not None:
                     if date - datetime.now().date() > timedelta(days=court.max_booking_days_in_advance):
                         raise ValueError(
                             f"Booking is too far in advance ({(date - datetime.now().date()).days} days"
                             f", max allowed is {court.max_booking_days_in_advance} days)")
-
 
         validate()
         check_authorisation()
@@ -97,6 +97,18 @@ class CreateBooking(graphene.Mutation):
         booking.save()
         return CreateBooking(booking=booking)
 
+class DeleteBooking(graphene.Mutation):
+    ok = graphene.Boolean()
+
+    class Arguments:
+        booking_id = graphene.ID()
+
+    def mutate(self, info, booking_id):
+        obj = models.Booking.objects.get(id=booking_id)
+        obj.delete()
+        return DeleteBooking(ok=True)
+
 
 class Mutation(graphene.ObjectType):
     create_booking = CreateBooking.Field()
+    delete_booking = DeleteBooking.Field()

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 
 // external dependencies
-import {useQuery} from "@vue/apollo-composable"
+import {useMutation, useQuery} from "@vue/apollo-composable"
 import {computed, onMounted, onUnmounted, ref, watch} from "vue";
 import {Temporal} from "temporal-polyfill";
 
 // src utils
-import {ALL_BOOKINGS, ALL_COURTS} from "@/queries";
+import {ALL_BOOKINGS, ALL_COURTS, BOOKINGS_BY_USER, CREATE_BOOKING, DELETE_BOOKING} from "@/queries";
 import {getMonday, getWeek, isToday, getTimeString} from "@/utils/datetime";
 import type {Court, Booking} from "@/types"
 
@@ -34,7 +34,7 @@ const months = ["January", "February", "March", "April", "May", "June", "July", 
 
 
 const vLineOverflowPx = 40 // the amount the vertical lines extend past the top and bottom (this affects offsetY of mouseEvents)
-const mobileBreakpointPx = 1000 // At screen widths less than this the app uses the mobile layout
+const mobileBreakpointPx = 900 // At screen widths less than this the app uses the mobile layout
 
 // keep track of the window width if it resizes
 const windowWidth = ref(window.innerWidth)
@@ -78,16 +78,19 @@ const hourGapPx = computed(() => mobile.value ? 50 : 80) // Height of 1 hour on 
 // Bookings snap to nearest [increment] minutes
 const increment = Temporal.Duration.from({hours: 0, minutes: 30})
 
+const emit = defineEmits<{ (e: 'deleteBooking', id: number) }>()
+
+
 // Queries =============================================================================================================
 // These are executed on component load
 
 // 1. Courts
-const q1 = useQuery(ALL_COURTS).result
-const allCourts = computed<Court[]>(() => q1.value?.allCourts ?? []) // is [] until the list loads from server
+const {result: courtQuery} = useQuery(ALL_COURTS)
+const allCourts = computed<Court[]>(() => courtQuery.value?.allCourts ?? []) // is [] until the list loads from server
 
 // 2. Bookings
-const q2 = useQuery(ALL_BOOKINGS).result
-const allBookings = computed<Booking[]>(() => q2.value?.allBookings ?? [])
+const {result: bookingsQuery} = useQuery(ALL_BOOKINGS)
+const allBookings = computed<Booking[]>(() => bookingsQuery.value?.allBookings ?? [])
 
 const displayedBookings = computed<Booking[]>(() => { // bookings on the screen (saves some compute time to have this preloaded)
   return allBookings.value.filter((obj) => {
@@ -98,6 +101,60 @@ const displayedBookings = computed<Booking[]>(() => { // bookings on the screen 
     return Temporal.PlainDate.compare(displayedWeek.value[0], d) <= 0 && Temporal.PlainDate.compare(displayedWeek.value[6], d) >= 0
   })
 })
+
+// Mutations ============================================================================================================
+
+interface readQueryType { // Again so typescript will leave me alone :/
+  allBookings: any[]
+}
+
+const {mutate: createBookingMutation} = useMutation(CREATE_BOOKING, () => ({
+  update: (cache, createBookingMutation) => {
+    let data: readQueryType = cache.readQuery({query: ALL_BOOKINGS})!
+    data = {
+      ...data,
+      allBookings: [
+        ...data.allBookings,
+        createBookingMutation,
+      ],
+    }
+    cache.writeQuery({query: ALL_BOOKINGS, data})
+  }
+}))
+
+function createBooking(): void {
+  // Should only be called once store is populated
+  createBookingMutation({
+    courtID: newBooking.court!.id,
+    date: newBooking.date!.toString(),
+    startTime: newBooking.startTime!.toString(),
+    endTime: newBooking.endTime!.toString(),
+    description: newBooking.description
+  })
+  newBooking.reset()
+}
+
+const {mutate: deleteBookingMutation} = useMutation(DELETE_BOOKING, () => ({
+  update: (cache, deleteBookingMutation) => {
+    let data: readQueryType = cache.readQuery({query: ALL_BOOKINGS})!
+    data = {
+      ...data,
+      allBookings: [
+        ...data.allBookings,
+        deleteBookingMutation,
+      ],
+    }
+    cache.writeQuery({query: ALL_BOOKINGS, data})
+  }
+}))
+
+function deleteBooking(id: number | string): void {
+  deleteBookingMutation({
+    bookingID: id
+  })
+  emit("deleteBooking", id)
+
+}
 
 
 // Refs and interactivity===============================================================================================
@@ -122,6 +179,7 @@ watch(activeCourtId, () => {
   // reset any temp booking we've made if the selected court changes
   newBooking.reset()
   newBooking.court = activeCourt.value
+
 })
 
 // GraphQL (and the Court type) store times and dates as strings, so these helper computed properties will save
@@ -153,18 +211,38 @@ const minBooking = computed<Temporal.Duration>(() => {
 })
 
 const maxBooking = computed<Temporal.Duration>(() => {
-  if (activeCourt.value) {
-    return Temporal.Duration.from({minutes: activeCourt.value?.maxBookingLengthMinutes}).round({largestUnit: 'hours'})
-  } else {
-    return Temporal.Duration.from({hours: 3})
+  // Case 1: Bypass restriction (allow up to 24h booking) if captain or admin
+  if (currentUser.groups.includes('Captain') || currentUser.groups.includes('Admin')) {
+    return Temporal.Duration.from({hours: 24})
   }
+
+  // wait for data to load
+  if (activeCourt.value) {
+
+    // Case 2: no restriction set on server, so allow up to 24h
+    if (activeCourt.value?.maxBookingLengthMinutes === null) {
+      return Temporal.Duration.from({hours: 24}) // bypass restriction if none set on server
+    }
+
+    // Case 3: set restriction based on value from server
+    return Temporal.Duration.from({minutes: activeCourt.value?.maxBookingLengthMinutes}).round({largestUnit: "hour"})
+  }
+  // Case 4: Not captain and data not loaded from server yet. Assume default value
+  return Temporal.Duration.from({hours: 3})
 })
 
-const maxAdvance = computed<Temporal.Duration>(() => {
+const maxAdvanceDay = computed<Temporal.PlainDate>(() => {
+  if (currentUser.groups.includes('Captain') || currentUser.groups.includes('Admin')) {
+    return today.add(Temporal.Duration.from({years: 999})) // bypass restriction if captain
+  }
   if (activeCourt.value) {
-    return Temporal.Duration.from({minutes: activeCourt.value?.maxBookingDaysInAdvance}).round({largestUnit: 'weeks'})
+    if (activeCourt.value?.maxBookingDaysInAdvance === null) {
+      return today.add(Temporal.Duration.from({years: 999})) // bypass restriction if no value set on server
+    } else {
+      return today.add(Temporal.Duration.from({days: activeCourt.value?.maxBookingDaysInAdvance})) // set restriction to given value from server
+    }
   } else {
-    return Temporal.Duration.from({weeks: 2})
+    return today.add(Temporal.Duration.from({weeks: 2})) // until data loads, assume default
   }
 })
 
@@ -223,6 +301,10 @@ function getTimeFromOffsetY(offsetY: number, round: number = increment.minutes):
 }
 
 const totalHeight = computed<number>(() => getTimeOffsetPx(activeCourtClosingTime.value))
+
+function isColumnGreyedOut(day: Temporal.PlainDate): boolean {
+  return Temporal.PlainDate.compare(day, today) < 0 || Temporal.PlainDate.compare(day, maxAdvanceDay.value) > 0 && currentUser.isAuthenticated
+}
 
 
 // Booking logic =======================================================================================================
@@ -288,6 +370,15 @@ function isValidEndTime(endTime: Temporal.PlainTime, startTime: Temporal.PlainTi
 
 // Validate a start time (needs to account for when it could end according to minBooking)
 function isValidStartTime(startTime: Temporal.PlainTime, day: Temporal.PlainDate): boolean {
+  // return false if booking is outside allowed date ranges
+  if (Temporal.PlainDate.compare(day, today) < 0) {
+    return false
+  }
+
+  if (Temporal.PlainDate.compare(day, maxAdvanceDay.value) > 0) {
+    return false
+  }
+
   // return false if start time is before court opening
   if (Temporal.PlainTime.compare(activeCourtOpeningTime.value, startTime) > 0) {
     return false
@@ -331,6 +422,7 @@ function calendarMouseDown(day: Temporal.PlainDate, e: MouseEvent) {
     newBooking.startTime = proposedStartTime
     newBooking.endTime = proposedStartTime.add(minBooking.value)
     newBooking.date = day
+    newBooking.court = activeCourt.value
     bookingStartIndicator.value.visible = false
   }
 }
@@ -389,6 +481,7 @@ function calendarTouchStart(day: Temporal.PlainDate, e: TouchEvent) {
       newBooking.startTime = proposedStartTime
       newBooking.endTime = proposedStartTime.add(minBooking.value)
       newBooking.date = day
+      newBooking.court = activeCourt.value
       bookingStartIndicator.value.visible = false
     }
   }, 200)
@@ -537,14 +630,15 @@ document.addEventListener('keyup', (e) => {
       </div>
 
       <!-- MOBILE controls section -->
-      <div v-else class="container d-flex flex-column justify-content-center align-items-center">
-        <div class="input-group mt-4 mb-2 px-3" style="max-width: 300px;">
+      <div v-else
+           class="container-fluid px-1 py-3 d-flex flex-row justify-content-center align-items-center flex-wrap gap-3">
+        <div class="input-group" style="width: 250px;">
           <span class="input-group-text text-bg-dark">Court: </span>
           <select class="form-select form-control" v-model="activeCourtId">
             <option v-for="court in allCourts" :value="court.id">{{ court.name }}</option>
           </select>
         </div>
-        <div class="btn-group mx-0">
+        <div class="btn-group">
           <button class="btn" @click="shiftViewByNumDays(-7)">
             <i class="bi bi-chevron-left fs-3"></i>
           </button>
@@ -607,8 +701,10 @@ document.addEventListener('keyup', (e) => {
           </span>
         </div>
 
+
         <!-- Column containing bookings. Borders provide the vertical lines and can be highlighted for current day -->
         <div class="col dayColumn" v-for="(columnDay, index) in displayedWeek">
+
 
           <!-- the parent has zero-width, so we need this element to set the correct column width. All click interactions are done onto this -->
           <div class="inner"
@@ -620,29 +716,31 @@ document.addEventListener('keyup', (e) => {
                @mouseup="calendarMouseUp()"
                :style="{top: `${-vLineOverflowPx}px`, height: `${totalHeight + 2 * vLineOverflowPx}px`,
                         width: mobile ? (isToday(columnDay) ? dayColumnWidthMobileHighlight : dayColumnWidthMobile) : (isToday(columnDay) ? dayColumnWidthHighlight : dayColumnWidth),
-                        cursor: !currentUser.isAuthenticated ? 'default' : newBooking.state === 'mouse-down' ? 'ns-resize' : newBooking.state === 'idle' ? 'grab' : 'default'}"
+                        cursor: !currentUser.isAuthenticated ? 'default' : newBooking.state === 'mouse-down' ? 'ns-resize' : newBooking.state === 'idle' ? 'grab' : 'default',
+                        'background-color': isColumnGreyedOut(columnDay) ? 'rgba(0, 0, 0, 0.08)' : 'transparent'}"
                :class="{borderHighlight: isToday(columnDay), last: index===7-1}">
           </div> <!--overflows a bit past totalHeight to make the vertical lines extend past the top a little -->
 
           <!-- Bookings. Set height and vertical position using the functions in <script>, based on its start/end time -->
           <div class="bookingContainer"
-               :class="mobile ? 'px-0' : 'px-1'"
+               :class="mobile ? 'px-0 py-0' : 'px-2 py-1'"
                v-for="booking in displayedBookings.filter(b => Temporal.PlainDate.from(b.date).equals(columnDay))"
                :style="{top: `${getTimeOffsetPx(Temporal.PlainTime.from(booking.startTime))}px`,
                         height: `${getTimeOffsetPx(Temporal.PlainTime.from(booking.endTime)) - getTimeOffsetPx(Temporal.PlainTime.from(booking.startTime))}px`,
-                        width: mobile ? dayColumnWidthMobile : dayColumnWidth}">
+                        width: mobile ? dayColumnWidthMobile : dayColumnWidth}"
+               @delete-booking="(id) => {if (booking.id===id) {console.log('I got deleted')}}">
 
-            <div class="booking card"
+
+            <div class="booking card border-dark"
                  :class="currentUser.user?.id === booking.user.id ? 'bg-success-subtle' : 'bg-dark-subtle'">
 
               <div class="card-body d-flex flex-column justify-content-between" :class="mobile ? 'p-0' : 'p-1'">
 
-                <!-- At the top of the card: Time, description, close button -->
                 <div>
 
-                  <div class="mb-1">
+                  <div class="mb-1 d-flex flex-row justify-content-between">
 
-                    <span class="fw-bold" v-if="!mobile">
+                    <span class="fw-bold" v-if="!mobile" style="font-size: 10pt">
                       {{ getTimeString(Temporal.PlainTime.from(booking.startTime), settings.timeFormat24h) }}
                       -
                       {{ getTimeString(Temporal.PlainTime.from(booking.endTime), settings.timeFormat24h) }}
@@ -650,22 +748,20 @@ document.addEventListener('keyup', (e) => {
 
                     <!-- Delete button IF this is the logged in user's booking (action will also be validated in backend) -->
                     <button v-if="currentUser.user?.id === booking.user.id"
-                            class="deleteButton btn-close float-end">
+                            class="deleteButton btn-close p-0"
+                            :style="{'font-size': mobile ? '7pt' : '12pt'}"
+                            @click="deleteBooking(booking.id)">
                     </button>
                   </div>
 
-                  <p class="mb-0" v-if="!mobile">{{ booking.description }}</p>
+                  <p class="mb-1" v-if="!mobile">{{ booking.description }}</p>
 
-                </div>
-
-                <!-- At the bottom: name, email -->
-                <div style="font-size: 9pt; line-height: 1em;">
-
-                  <p class="mb-1" :class="mobile ? 'fst-normal' : 'fst-italic'">
+                  <p class="mb-0" :class="mobile ? 'fst-normal' : 'fst-italic'" style="line-height: 1em;"
+                     :style="{'font-size': mobile ? '8pt' : '10pt'}">
 
                     <i class="bi bi-person-fill" v-if="!mobile"></i>
                     {{ booking.user.firstName + " " + booking.user.lastName }}
-                    <span class="font-monospace fst-normal text-primary">
+                    <span class="font-monospace fst-normal text-primary" v-if="!mobile">
                       ({{ currentUser.user?.id === booking.user.id ? 'you' : booking.user.email.split('@')[0] }})
                     </span>
 
@@ -711,10 +807,11 @@ document.addEventListener('keyup', (e) => {
                 </div>
 
 
-                <!-- Confirmation dialog after user releases mouse -->
+                <!-- Desktop booking confirmation dialog after user releases mouse -->
                 <div v-if="newBooking.state==='in-form' && !mobile" :style="{'font-size': mobile ? '12pt' : '16pt'}">
                   <div class="confirmButtons d-flex justify-content-evenly px-0 mb-2 rounded">
-                    <button class="bi bi-check2 bg-success rounded px-2 me-2 text-white"></button>
+                    <button class="bi bi-check2 bg-success rounded px-2 me-2 text-white"
+                            @click="createBooking()"></button>
                     <button class="bi bi-x-lg bg-danger rounded px-2 text-white"
                             @click="newBooking.reset()"></button>
                   </div>
@@ -788,7 +885,8 @@ document.addEventListener('keyup', (e) => {
       <input class="form-control" placeholder="Description (optional)">
     </div>
     <div class="align-self-end d-flex flex-row fs-2 mt-1">
-      <div class="action bg-success text-white d-flex justify-content-center align-items-center p-3 me-2">
+      <div class="action bg-success text-white d-flex justify-content-center align-items-center p-3 me-2"
+           @touchend="createBooking()">
         <i class="bi bi-check2"></i>
       </div>
       <div class="action bg-danger text-white d-flex justify-content-center align-items-center p-3"
@@ -848,6 +946,10 @@ $dayColumnWidth: calc(100% * (10 / (12 * 7)));
 
 
     .dayColumn {
+      .bg {
+        position: absolute;
+      }
+
       .inner {
         position: absolute;
         border-left: 1px solid grey;
@@ -863,7 +965,6 @@ $dayColumnWidth: calc(100% * (10 / (12 * 7)));
       .borderHighlight {
         border-left: 3px solid $highlightColor;
         border-right: 3px solid $highlightColor;
-        width: calc($dayColumnWidth + 1px);
         z-index: 20;
       }
 
@@ -937,6 +1038,9 @@ $dayColumnWidth: calc(100% * (10 / (12 * 7)));
   border-radius: 50%;
 }
 
+.bg-disabled {
+  background-color: #efefef
+}
 
 .border-dash-animation {
   background-image: linear-gradient(90deg, black 50%, transparent 50%), linear-gradient(90deg, black 50%, transparent 50%), linear-gradient(0deg, black 50%, transparent 50%), linear-gradient(0deg, black 50%, transparent 50%);

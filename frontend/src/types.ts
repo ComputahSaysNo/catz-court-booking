@@ -4,8 +4,8 @@ interface Court {
     openingTime: string
     closingTime: string
     minBookingLengthMinutes: number
-    maxBookingLengthMinutes: number
-    maxBookingDaysInAdvance: number
+    maxBookingLengthMinutes: number | null
+    maxBookingDaysInAdvance: number | null
 }
 
 interface Booking {

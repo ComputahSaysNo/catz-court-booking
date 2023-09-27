@@ -74,3 +74,34 @@ export const BOOKINGS_BY_USER = gql`
         }
     }
 `
+
+export const CREATE_BOOKING = gql`
+    mutation  ($courtID: ID!, $date: Date!, $startTime: Time!, $endTime: Time!, $description: String!) {
+        createBooking(courtId: $courtID, date: $date, startTime: $startTime, endTime: $endTime, description: $description) {
+            booking {
+                id
+                date
+                startTime
+                endTime
+                court {
+                    id
+                }
+                description
+                user {
+                    id
+                    firstName
+                    lastName
+                    email
+                }
+            }
+        }
+    }
+`
+
+export const DELETE_BOOKING = gql`
+    mutation  ($bookingID: ID!) {
+        deleteBooking(bookingId: $bookingID) {
+            ok
+        }
+    }
+`
