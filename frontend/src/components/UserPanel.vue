@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {useUserStore} from "@/stores/user";
-import {useQuery} from "@vue/apollo-composable";
-import {BOOKINGS_BY_USER} from "@/queries";
+import {useMutation, useQuery} from "@vue/apollo-composable";
+import {ALL_BOOKINGS, DELETE_BOOKING} from "@/queries";
 import {computed} from "vue";
 import type {Booking} from "@/types";
 import {Temporal} from "temporal-polyfill";
@@ -10,8 +10,35 @@ import {getMonday} from "@/utils/datetime";
 
 const userStore = useUserStore()
 
-const {result, loading} = useQuery(BOOKINGS_BY_USER, {userId: userStore.user?.id})
-const userBookings = computed<Booking[]>(() => result.value?.bookingsByUser.sort() ?? [])
+const {result, loading} = useQuery(ALL_BOOKINGS)
+const userBookings = computed<Booking[]>(() => result.value?.allBookings?.filter((obj)=>obj.user.id === userStore.user.id) ?? [])
+
+interface readQueryType { // Again so typescript will leave me alone :/
+  allBookings: any[]
+}
+
+const {mutate: deleteBookingMutation} = useMutation(DELETE_BOOKING, () => ({
+  update: (cache, deleteBookingMutation) => {
+    let data: readQueryType = cache.readQuery({query: ALL_BOOKINGS})!
+    data = {
+      ...data,
+      allBookings: [
+        ...data.allBookings,
+        deleteBookingMutation,
+      ],
+    }
+    cache.writeQuery({query: ALL_BOOKINGS, data})
+  }
+}))
+
+function deleteBooking(id: number | string): void {
+  deleteBookingMutation({
+    bookingID: id
+  })
+  emit("deleteBooking", id)
+
+}
+
 
 </script>
 
@@ -29,7 +56,7 @@ const userBookings = computed<Booking[]>(() => result.value?.bookingsByUser.sort
         <div class="p-2 card bg-light" style="line-height: 0.5em; min-width: 180px" v-for="booking in userBookings">
           <div>
             <span class="badge bg-danger fs-6">{{ booking.court.name }}</span>
-            <button class="btn-close float-end"></button>
+            <button class="btn-close float-end" @click="deleteBooking(booking.id)"></button>
           </div>
           <p class="mt-3 fw-bold">{{
               Temporal.PlainDate.from(booking.date).toLocaleString('en-GB', {

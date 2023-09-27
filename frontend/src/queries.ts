@@ -16,6 +16,7 @@ export const ALL_BOOKINGS = gql `
             id
             court {
                 id
+                name
             }
             date
             startTime
