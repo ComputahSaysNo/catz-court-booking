@@ -11,9 +11,10 @@ import {getMonday} from "@/utils/datetime";
 const userStore = useUserStore()
 
 const {result, loading} = useQuery(ALL_BOOKINGS)
-const userBookings = computed<Booking[]>(() => result.value?.allBookings?.filter((obj)=>obj.user.id === userStore.user.id) ?? [])
+const userBookings = computed<Booking[]>(() => result.value?.allBookings?.filter((obj: Booking)=>obj.user.id === userStore.user?.id) ?? [])
 
-interface readQueryType { // Again so typescript will leave me alone :/
+
+interface readQueryType {
   allBookings: any[]
 }
 
@@ -35,7 +36,6 @@ function deleteBooking(id: number | string): void {
   deleteBookingMutation({
     bookingID: id
   })
-  emit("deleteBooking", id)
 
 }
 
@@ -43,7 +43,7 @@ function deleteBooking(id: number | string): void {
 </script>
 
 <template>
-  <div v-if="userStore.user" class="container-fluid card mt-4 bg-white p-3 rounded" style="max-width: 1500px">
+  <div v-if="userStore.user" class="container-fluid card mt-4 bg-white p-3 rounded" style="max-width: 1200px">
     <div class="d-flex mb-4">
       <span class="fs-3 me-2">Hello, {{ userStore.user?.firstName }}</span>
       <span class="badge bg-primary mx-1 fs-6 align-self-center font-monospace" v-for="group of userStore.groups">{{ group }}</span>
@@ -53,7 +53,7 @@ function deleteBooking(id: number | string): void {
     <div v-if="userBookings.length > 0">
       <p class="fs-5">Your upcoming bookings: </p>
       <div class="d-flex flex-row flex-wrap gap-3">
-        <div class="p-2 card bg-light" style="line-height: 0.5em; min-width: 180px" v-for="booking in userBookings">
+        <div class="p-2 card bg-light" style="line-height: 0.5em; min-width: 160px;" v-for="booking in userBookings">
           <div>
             <span class="badge bg-danger fs-6">{{ booking.court.name }}</span>
             <button class="btn-close float-end" @click="deleteBooking(booking.id)"></button>
@@ -71,7 +71,7 @@ function deleteBooking(id: number | string): void {
       </div>
     </div>
 
-    <p v-else class="fs-5">You have no upcoming bookings. Click on the calendar below to make one: </p>
+    <div v-else class="fs-5"><p class="mb-0">You have no upcoming bookings.</p><p>Use the calendar below to make one:</p>   </div>
   </div>
 </template>
 

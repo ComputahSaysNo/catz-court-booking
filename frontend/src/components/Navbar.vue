@@ -10,6 +10,7 @@ function logout() {
   userStore.user = null
   userStore.isAuthenticated = false
   tokenStore.token = null
+  localStorage.removeItem("token")
 }
 
 const windowWidth = ref(window.innerWidth)
@@ -38,8 +39,9 @@ const mobile = computed(() => windowWidth.value < 1000)
           <i class="bi bi-person"></i>
           {{mobile ? "Log in" : "Log in with Raven"}}</a>
         <div v-else>
-          <span class="mx-4 text-light fst-italic">logged in as {{userStore.user?.email}}</span>
-          <a href="http://127.0.0.1:8000/accounts/logout" class="btn btn-outline-light">Log out</a>
+          <span v-if="!mobile" class="mx-4 text-light fst-italic">logged in as {{userStore.user?.email}}</span>
+          <a href="http://127.0.0.1:8000/accounts/logout" @click="logout" class="btn btn-outline-light">Log out</a>
+          <a href="http://127.0.0.1:8000/admin/" v-if="userStore.groups.includes('Admin')" class="ms-2 btn btn-outline-warning">Admin panel</a>
         </div>
 
 

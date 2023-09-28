@@ -15,6 +15,7 @@ import type {Court, Booking} from "@/types"
 import {useUserStore} from "@/stores/user";
 import {useNewBookingStore} from "@/stores/newBooking";
 import {useSettingsStore} from "@/stores/settings";
+import {max} from "@popperjs/core/lib/utils/math";
 
 const currentUser = useUserStore()
 const newBooking = useNewBookingStore()
@@ -73,12 +74,10 @@ const hLineWidthMobile = "calc(100% * (11/12) + 2vw)"
 
 // Some more mobile/desktop specific layout choices
 const dayLabels = computed<string[]>(() => mobile.value ? daysInitial : daysShort) // "Mon Tues Weds..." vs "M T W..." in the top
-const hourGapPx = computed(() => mobile.value ? 50 : 80) // Height of 1 hour on the calendar
+const hourGapPx = computed(() => mobile.value ? 50 : 100) // Height of 1 hour on the calendar
 
 // Bookings snap to nearest [increment] minutes
 const increment = Temporal.Duration.from({hours: 0, minutes: 30})
-
-const emit = defineEmits<{ (e: 'deleteBooking', id: number) }>()
 
 
 // Queries =============================================================================================================
@@ -103,6 +102,8 @@ const displayedBookings = computed<Booking[]>(() => { // bookings on the screen 
 })
 
 // Mutations ============================================================================================================
+
+const cooldown = ref(false) // used to prevent the start booking indicator clipping inside a newly created booking
 
 interface readQueryType { // Again so typescript will leave me alone :/
   allBookings: any[]
@@ -132,6 +133,12 @@ function createBooking(): void {
     description: newBooking.description
   })
   newBooking.reset()
+
+  // delay the new booking indicator starting for a bit, prevents it clipping inside the new booking
+  cooldown.value = true
+  setTimeout(()=> {
+    cooldown.value = false;
+  }, 500)
 }
 
 const {mutate: deleteBookingMutation} = useMutation(DELETE_BOOKING, () => ({
@@ -152,7 +159,6 @@ function deleteBooking(id: number | string): void {
   deleteBookingMutation({
     bookingID: id
   })
-  emit("deleteBooking", id)
 
 }
 
@@ -451,7 +457,7 @@ function calendarMouseMove(day: Temporal.PlainDate, e: MouseEvent) {
   }
 
   // otherwise update the start time indicator
-  if (newBooking.state === "idle") {
+  if (newBooking.state === "idle" && !cooldown.value) {
     if (isValidStartTime(newTime, day)) {
       if (!bookingStartIndicator.value.visible || !bookingStartIndicator.value.time.equals(newTime) || !bookingStartIndicator.value.day.equals(day)) {
         bookingStartIndicator.value.time = newTime
@@ -469,6 +475,10 @@ function calendarMouseMove(day: Temporal.PlainDate, e: MouseEvent) {
 let pressTimer: any // timer for setTimeout to detect a long press
 
 function calendarTouchStart(day: Temporal.PlainDate, e: TouchEvent) {
+  if (!currentUser.isAuthenticated) {
+    return
+  } // must be authenticated to create bookings
+
   let rect = {x: 0, y: 0}
   if (e.target instanceof Element) { // So typescript doesn't scream at me
     rect = e.target!.getBoundingClientRect()
@@ -584,7 +594,7 @@ document.addEventListener('keyup', (e) => {
     <div class="top bg-white mb-2">
 
       <!-- DESKTOP controls section -->
-      <div class="controls container-fluid card bg-light my-5" v-if="!mobile">
+      <div class="controls container-fluid card bg-light mt-5" v-if="!mobile">
 
         <div class="row justify-content-end">
 
@@ -659,8 +669,17 @@ document.addEventListener('keyup', (e) => {
         </div>
       </div>
 
+      <!-- Advance booking notice -->
+      <div class="row"
+           v-if="!currentUser.groups.includes('Captain') && !currentUser.groups.includes('Admin') && Temporal.PlainDate.compare(displayedWeek[displayedWeek.length - 1], maxAdvanceDay) >= 0">
+        <div class="col text-center text-danger mt-4">
+          <i class="bi bi-exclamation-triangle"></i>
+          You must be a captain to book more than {{ activeCourt?.maxBookingDaysInAdvance }} days in advance
+        </div>
+      </div>
+
       <!-- Day labels: Mon Tue Wed etc for desktop, M T W etc for mobile -->
-      <div class="dayLabels container-fluid p-0">
+      <div class="dayLabels container-fluid p-0 mt-4">
 
         <div class="row g-0">
 
@@ -727,45 +746,46 @@ document.addEventListener('keyup', (e) => {
                v-for="booking in displayedBookings.filter(b => Temporal.PlainDate.from(b.date).equals(columnDay))"
                :style="{top: `${getTimeOffsetPx(Temporal.PlainTime.from(booking.startTime))}px`,
                         height: `${getTimeOffsetPx(Temporal.PlainTime.from(booking.endTime)) - getTimeOffsetPx(Temporal.PlainTime.from(booking.startTime))}px`,
-                        width: mobile ? dayColumnWidthMobile : dayColumnWidth}"
-               @delete-booking="(id) => {if (booking.id===id) {console.log('I got deleted')}}">
+                        width: mobile ? (isToday(columnDay) ? dayColumnWidthMobileHighlight : dayColumnWidthMobile) : (isToday(columnDay) ? dayColumnWidthHighlight : dayColumnWidth),}">
 
 
             <div class="booking card border-dark"
                  :class="currentUser.user?.id === booking.user.id ? 'bg-success-subtle' : 'bg-dark-subtle'">
 
-              <div class="card-body d-flex flex-column justify-content-between" :class="mobile ? 'p-0' : 'p-1'">
+              <div class="card-body d-flex flex-column justify-content-between" :class="mobile ? 'py-1 px-0' : 'p-1'">
 
                 <div>
 
-                  <div class="mb-1 d-flex flex-row justify-content-between">
-
-                    <span class="fw-bold" v-if="!mobile" style="font-size: 10pt">
+                  <div class="d-flex flex-row justify-content-between mb-2">
+                    <div>
+                      <span class="" v-if="!mobile" style="font-size: 10pt">
                       {{ getTimeString(Temporal.PlainTime.from(booking.startTime), settings.timeFormat24h) }}
                       -
                       {{ getTimeString(Temporal.PlainTime.from(booking.endTime), settings.timeFormat24h) }}
                     </span>
+                    </div>
+
 
                     <!-- Delete button IF this is the logged in user's booking (action will also be validated in backend) -->
-                    <button v-if="currentUser.user?.id === booking.user.id"
+                    <button v-if="currentUser.user?.id === booking.user.id || currentUser.groups.includes('Admin')"
                             class="deleteButton btn-close p-0"
                             :style="{'font-size': mobile ? '7pt' : '12pt'}"
                             @click="deleteBooking(booking.id)">
                     </button>
                   </div>
 
-                  <p class="mb-1" v-if="!mobile">{{ booking.description }}</p>
+                  <p class="mb-2 fw-bold" v-if="!mobile && booking.description">{{ booking.description }}</p>
 
-                  <p class="mb-0" :class="mobile ? 'fst-normal' : 'fst-italic'" style="line-height: 1em;"
+                  <div class="mb-0" :class="mobile ? 'fst-normal' : 'fst-italic'" style="line-height: 1em;"
                      :style="{'font-size': mobile ? '8pt' : '10pt'}">
 
-                    <i class="bi bi-person-fill" v-if="!mobile"></i>
-                    {{ booking.user.firstName + " " + booking.user.lastName }}
+                    <i class="bi bi-person-circle" v-if="!mobile"></i>
+                      {{ booking.user.firstName + " " + booking.user.lastName }}
                     <span class="font-monospace fst-normal text-primary" v-if="!mobile">
                       ({{ currentUser.user?.id === booking.user.id ? 'you' : booking.user.email.split('@')[0] }})
                     </span>
 
-                  </p>
+                  </div>
 
                 </div>
 
@@ -780,14 +800,14 @@ document.addEventListener('keyup', (e) => {
                v-if="newBooking.state !== 'idle' && newBooking.date!.equals(columnDay)"
                :style="{top: getTimeOffsetPx(newBooking.startTime!) + 'px',
                         height: getTimeOffsetPx(newBooking.endTime!) - getTimeOffsetPx(newBooking.startTime!) + 'px',
-                        width: mobile ? dayColumnWidthMobile : dayColumnWidth}">
+                        width: mobile ? (isToday(columnDay) ? dayColumnWidthMobileHighlight : dayColumnWidthMobile) : (isToday(columnDay) ? dayColumnWidthHighlight : dayColumnWidth),}">
 
             <div class="newBooking card bg-warning-subtle py-0 px-1 is-bold  border-dash-animation">
 
               <div class="card-body py-1 px-0 d-flex flex-column justify-content-between">
 
                 <!-- Top -->
-                <div class="fw-bold text-center" :style="{'font-size': mobile ? '8pt' : '13pt'}"
+                <div class="fw-bold text-center mb-0" :style="{'font-size': mobile ? '8pt' : '13pt'}"
                      style="line-height: 1.2em;">
                   <!-- Ok to non-null assert these due to the v-if in bookingContainer -->
                   {{ getTimeString(newBooking.startTime!, settings.timeFormat24h) }}
@@ -803,7 +823,7 @@ document.addEventListener('keyup', (e) => {
                 <!-- Bottom -->
                 <div class="align-self-center text-center fw-bold" v-if="newBooking.state==='mouse-down' && !mobile">
                   <p class="mb-0">drag down to set time </p>
-                  <p class="mb-2">or hit <span class="text-danger bg-light p-1 rounded">esc</span> to cancel</p>
+                  <p class="mb-2">hit <span class="text-danger bg-light p-1 rounded">esc</span> to cancel</p>
                 </div>
 
 
@@ -826,7 +846,7 @@ document.addEventListener('keyup', (e) => {
 
             <!-- Description input for desktop interface, shows once the user has released the drag -->
             <div v-if="newBooking.state==='in-form' && !mobile"
-                 class="descriptionInput mt-1 border border-3 border-dark rounded align-self-center"
+                 class="descriptionInput mt-1 border border-3 border-dark rounded align-self-center mx-2"
                  style="">
                     <textarea v-model="newBooking.description" type="text" class="form-control form-control-sm"
                               placeholder="Description (optional)"
@@ -847,7 +867,7 @@ document.addEventListener('keyup', (e) => {
           </div>
 
           <!-- indicator displaying the current time on the calendar area. Currently ISN'T reactive to reduce performance impact -->
-          <div class="currTimeLine"
+          <div class="currTimeLine bg-disabled"
                v-if="isToday(columnDay) && Temporal.PlainTime.compare(activeCourtOpeningTime, now) <= 0 && Temporal.PlainTime.compare(activeCourtClosingTime, now) >= 0"
                :style="{top: getTimeOffsetPx(now) + 'px',
                         width: mobile ? dayColumnWidthMobile : dayColumnWidth}">
@@ -855,7 +875,7 @@ document.addEventListener('keyup', (e) => {
 
           <!--  (Desktop only) shows if the user can make a booking from where their cursor is currently -->
           <div class="startBookingLine text-center"
-               v-if="!mobile && currentUser.isAuthenticated && bookingStartIndicator.visible && columnDay.equals(bookingStartIndicator.day)"
+               v-if="!mobile && !cooldown && currentUser.isAuthenticated && bookingStartIndicator.visible && columnDay.equals(bookingStartIndicator.day)"
                :style="{top: getTimeOffsetPx(bookingStartIndicator.time) + 'px',
                         width: mobile ? dayColumnWidthMobile : dayColumnWidth}">
             <i class="bi bi-arrow-down position-relative fs-2" style="top: 0;"></i>
@@ -901,9 +921,7 @@ document.addEventListener('keyup', (e) => {
 
 <style scoped lang="scss">
 
-$highlightColor: hsl(348, 100%, 61%);
-
-$dayColumnWidth: calc(100% * (10 / (12 * 7)));
+$highlightColor: rgb(255, 56, 96);
 
 .outerWrapper {
   touch-action: manipulation;
@@ -914,7 +932,7 @@ $dayColumnWidth: calc(100% * (10 / (12 * 7)));
   user-select: none;
   -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
 
-  max-width: calc(min(1500px, 100vw));
+  max-width: calc(min(1600px, 100vw));
 
   .top {
     position: sticky;
@@ -997,14 +1015,12 @@ $dayColumnWidth: calc(100% * (10 / (12 * 7)));
       }
 
       .currTimeLine {
-        width: calc(100% * (10 / (12 * 7)));
         position: absolute;
         z-index: 0;
-        border-bottom: 4px solid $highlightColor;
+        border-bottom: 4px dashed $highlightColor;
       }
 
       .startBookingLine {
-        width: $dayColumnWidth;
         position: absolute;
         border-top: 2px solid black;
       }
@@ -1039,7 +1055,7 @@ $dayColumnWidth: calc(100% * (10 / (12 * 7)));
 }
 
 .bg-disabled {
-  background-color: #efefef
+  background-color: rgba(0, 0, 0, 0.08)
 }
 
 .border-dash-animation {

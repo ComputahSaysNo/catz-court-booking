@@ -37,8 +37,8 @@ class CreateBooking(graphene.Mutation):
                 raise ValueError("Booking ends after the court closes")
 
             # Check the booking is not in the past
-            if datetime.combine(date, start_time) < datetime.now():
-                raise ValueError("Cannot make a booking in the past")
+            if date < datetime.now().date():
+                raise ValueError("Cannot make a booking before today")
 
             # Check for overlaps with other bookings on that day and court
             potential_conflicts = models.Booking.objects.filter(court_id=court_id, date=date)

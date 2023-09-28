@@ -26,8 +26,6 @@ const httpLink = createHttpLink({
 const app = createApp(App)
 app.use(createPinia())
 app.use(router)
-// noinspection TypeScriptValidateTypes
-app.use(Vue3TouchEvents)
 
 const tokenStore = useTokenStore()
 const cache = new InMemoryCache()

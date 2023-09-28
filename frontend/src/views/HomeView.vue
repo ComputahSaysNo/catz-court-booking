@@ -3,7 +3,7 @@ import Calendar from "@/components/Calendar.vue"
 import UserPanel from "@/components/UserPanel.vue";
 
 import {useUserStore} from "@/stores/user";
-import {computed, onMounted, ref} from "vue";
+import {computed, onBeforeMount, ref} from "vue";
 import {useLazyQuery, useQuery} from "@vue/apollo-composable";
 import {SESSION_INFO} from "@/queries";
 import {useRoute, useRouter} from "vue-router";
@@ -16,14 +16,18 @@ const userStore = useUserStore()
 const loginError = ref<boolean>(false)
 const errorMessage = ref<string>("")
 
-onMounted(() => {
+onBeforeMount(() => {
 
-  const token = route.query.token
+  const localToken = localStorage.getItem("token")
+  const remoteToken = route.query.token
   const err = route.query.error
 
 
-  if (token) {
-    tokenStore.token = token.toString()
+  if (localToken || remoteToken) {
+
+    let token = remoteToken ? remoteToken.toString() : localToken // use token from server if it exists, otherwise use token from storage
+
+    tokenStore.token = token!
     const {load} = useLazyQuery(SESSION_INFO)
 
     async function waitForLoad() {
@@ -37,6 +41,7 @@ onMounted(() => {
           userStore.user = sessionInfo.user
           userStore.isAuthenticated = true
           userStore.groups = sessionInfo.groups
+          localStorage.setItem("token", token!)
           router.push('/')
         } else {
           loginError.value = true
