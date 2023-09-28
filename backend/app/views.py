@@ -8,6 +8,6 @@ from rest_framework.authtoken.models import Token
 def user_token(request):
     if request.user.is_authenticated:
         token, e = Token.objects.get_or_create(user=request.user)
-        return redirect('http://localhost:5173/?token='+token.key)
+        return redirect('https://km814.user.srcf.net/?token='+token.key)
     else:
-        return redirect('http://localhost:5173/?error=true')
+        return redirect('https://km814.user.srcf.net/?error=true')

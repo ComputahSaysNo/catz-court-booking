@@ -15,7 +15,6 @@ import type {Court, Booking} from "@/types"
 import {useUserStore} from "@/stores/user";
 import {useNewBookingStore} from "@/stores/newBooking";
 import {useSettingsStore} from "@/stores/settings";
-import {max} from "@popperjs/core/lib/utils/math";
 
 const currentUser = useUserStore()
 const newBooking = useNewBookingStore()
@@ -101,6 +100,14 @@ const displayedBookings = computed<Booking[]>(() => { // bookings on the screen 
   })
 })
 
+const loading = ref(true)
+const deleteTarget = ref<null | number | string>(null)
+watch(allBookings, () => {
+  loading.value = false
+  deleteTarget.value = null
+  newBooking.reset()
+})
+
 // Mutations ============================================================================================================
 
 const cooldown = ref(false) // used to prevent the start booking indicator clipping inside a newly created booking
@@ -109,7 +116,8 @@ interface readQueryType { // Again so typescript will leave me alone :/
   allBookings: any[]
 }
 
-const {mutate: createBookingMutation} = useMutation(CREATE_BOOKING, () => ({
+
+const {mutate: createBookingMutation, loading: createLoading} = useMutation(CREATE_BOOKING, () => ({
   update: (cache, createBookingMutation) => {
     let data: readQueryType = cache.readQuery({query: ALL_BOOKINGS})!
     data = {
@@ -124,6 +132,7 @@ const {mutate: createBookingMutation} = useMutation(CREATE_BOOKING, () => ({
 }))
 
 function createBooking(): void {
+  loading.value = true
   // Should only be called once store is populated
   createBookingMutation({
     courtID: newBooking.court!.id,
@@ -132,16 +141,15 @@ function createBooking(): void {
     endTime: newBooking.endTime!.toString(),
     description: newBooking.description
   })
-  newBooking.reset()
 
   // delay the new booking indicator starting for a bit, prevents it clipping inside the new booking
   cooldown.value = true
-  setTimeout(()=> {
+  setTimeout(() => {
     cooldown.value = false;
   }, 500)
 }
 
-const {mutate: deleteBookingMutation} = useMutation(DELETE_BOOKING, () => ({
+const {mutate: deleteBookingMutation, loading: deleteLoading} = useMutation(DELETE_BOOKING, () => ({
   update: (cache, deleteBookingMutation) => {
     let data: readQueryType = cache.readQuery({query: ALL_BOOKINGS})!
     data = {
@@ -156,6 +164,8 @@ const {mutate: deleteBookingMutation} = useMutation(DELETE_BOOKING, () => ({
 }))
 
 function deleteBooking(id: number | string): void {
+  loading.value = true
+  deleteTarget.value = id
   deleteBookingMutation({
     bookingID: id
   })
@@ -765,22 +775,30 @@ document.addEventListener('keyup', (e) => {
                     </span>
                     </div>
 
+                    <div class="align-self-center" v-if="loading && deleteTarget === booking.id" >
+                      <div class="spinner-border" role="status " style="width: 20px; height: 20px;">
+                        <span class="visually-hidden">Loading...</span>
+                      </div>
+                    </div>
+
 
                     <!-- Delete button IF this is the logged in user's booking (action will also be validated in backend) -->
-                    <button v-if="currentUser.user?.id === booking.user.id || currentUser.groups.includes('Admin')"
+                    <button v-else-if="currentUser.user?.id === booking.user.id || currentUser.groups.includes('Admin')"
                             class="deleteButton btn-close p-0"
                             :style="{'font-size': mobile ? '7pt' : '12pt'}"
                             @click="deleteBooking(booking.id)">
                     </button>
+
+
                   </div>
 
                   <p class="mb-2 fw-bold" v-if="!mobile && booking.description">{{ booking.description }}</p>
 
                   <div class="mb-0" :class="mobile ? 'fst-normal' : 'fst-italic'" style="line-height: 1em;"
-                     :style="{'font-size': mobile ? '8pt' : '10pt'}">
+                       :style="{'font-size': mobile ? '8pt' : '10pt'}">
 
                     <i class="bi bi-person-circle" v-if="!mobile"></i>
-                      {{ booking.user.firstName + " " + booking.user.lastName }}
+                    {{ booking.user.firstName + " " + booking.user.lastName }}
                     <span class="font-monospace fst-normal text-primary" v-if="!mobile">
                       ({{ currentUser.user?.id === booking.user.id ? 'you' : booking.user.email.split('@')[0] }})
                     </span>
@@ -797,7 +815,7 @@ document.addEventListener('keyup', (e) => {
 
           <!-- New booking indicator. Calculate height/position in the same way as the actual bookings -->
           <div class="bookingContainer"
-               v-if="newBooking.state !== 'idle' && newBooking.date!.equals(columnDay)"
+               v-if="(newBooking.state !== 'idle' || loading) && newBooking.date?.equals(columnDay)"
                :style="{top: getTimeOffsetPx(newBooking.startTime!) + 'px',
                         height: getTimeOffsetPx(newBooking.endTime!) - getTimeOffsetPx(newBooking.startTime!) + 'px',
                         width: mobile ? (isToday(columnDay) ? dayColumnWidthMobileHighlight : dayColumnWidthMobile) : (isToday(columnDay) ? dayColumnWidthHighlight : dayColumnWidth),}">
@@ -818,6 +836,12 @@ document.addEventListener('keyup', (e) => {
                     max length: {{ maxBooking.hours }}h<span
                       v-if="maxBooking.minutes!==0">{{ maxBooking.minutes }}m</span>
                   </p>
+
+                </div>
+                <div class="align-self-center">
+                  <div class="spinner-border" v-if="loading" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                  </div>
                 </div>
 
                 <!-- Bottom -->
@@ -829,7 +853,7 @@ document.addEventListener('keyup', (e) => {
 
                 <!-- Desktop booking confirmation dialog after user releases mouse -->
                 <div v-if="newBooking.state==='in-form' && !mobile" :style="{'font-size': mobile ? '12pt' : '16pt'}">
-                  <div class="confirmButtons d-flex justify-content-evenly px-0 mb-2 rounded">
+                  <div class="confirmButtons d-flex justify-content-evenly px-0 mb-2 rounded" v-if="!loading">
                     <button class="bi bi-check2 bg-success rounded px-2 me-2 text-white"
                             @click="createBooking()"></button>
                     <button class="bi bi-x-lg bg-danger rounded px-2 text-white"

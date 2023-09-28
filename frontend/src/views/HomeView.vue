@@ -19,6 +19,7 @@ const errorMessage = ref<string>("")
 onBeforeMount(() => {
 
   const localToken = localStorage.getItem("token")
+
   const remoteToken = route.query.token
   const err = route.query.error
 

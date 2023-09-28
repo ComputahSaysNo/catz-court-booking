@@ -1,2 +1,2 @@
-schema: http://127.0.0.1:8000/graphql
+schema: https://km814.user.srcf.net/graphql
 documents: '**/*.graphql'

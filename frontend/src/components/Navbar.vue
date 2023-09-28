@@ -34,14 +34,14 @@ const mobile = computed(() => windowWidth.value < 1000)
         <img src="@/assets/catz-wheel.svg" width="35" height="35" class="mb-1 mx-1" v-if="!mobile">
         Catz Court Booking</span>
       <form class="d-flex">
-        <a href="http://127.0.0.1:8000/accounts/login/google-oauth2/" v-if="!userStore.isAuthenticated"
+        <a href="https://km814.user.srcf.net/accounts/login/google-oauth2/" v-if="!userStore.isAuthenticated"
            class="btn btn-outline-light">
           <i class="bi bi-person"></i>
           {{mobile ? "Log in" : "Log in with Raven"}}</a>
         <div v-else>
           <span v-if="!mobile" class="mx-4 text-light fst-italic">logged in as {{userStore.user?.email}}</span>
-          <a href="http://127.0.0.1:8000/accounts/logout" @click="logout" class="btn btn-outline-light">Log out</a>
-          <a href="http://127.0.0.1:8000/admin/" v-if="userStore.groups.includes('Admin')" class="ms-2 btn btn-outline-warning">Admin panel</a>
+          <a href="https://km814.user.srcf.net/accounts/logout" @click="logout" class="btn btn-outline-light">Log out</a>
+          <a href="https://km814.user.srcf.net/admin/" v-if="userStore.groups.includes('Admin')" class="ms-2 btn btn-outline-warning">Admin panel</a>
         </div>
 
 

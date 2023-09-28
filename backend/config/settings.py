@@ -1,5 +1,8 @@
 import os
-from config import oauth_tokens
+from config import prod_config
+import mimetypes
+
+mimetypes.add_type("text/css", ".css", True)
 
 """
 Django settings for config project.
@@ -22,12 +25,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-k66eis9h6j085ey8pun$sz$5(q*evd5qczhblvao6ppm6#b5=!'
+SECRET_KEY = prod_config.DJANGO_SECRET
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [prod_config.FRONTEND_URI, '127.0.0.1']
 
 # Application definition
 
@@ -53,8 +56,8 @@ AUTHENTICATION_BACKENDS = [
 SOCIAL_AUTH_URL_NAMESPACE = 'social'
 SOCIAL_AUTH_JSONFIELD_ENABLED = True
 
-SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = oauth_tokens.GOOGLE_CLIENT_ID
-SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = oauth_tokens.GOOGLE_CLIENT_SECRET
+SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = prod_config.GOOGLE_CLIENT_ID
+SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = prod_config.GOOGLE_CLIENT_SECRET
 SOCIAL_AUTH_GOOGLE_OAUTH2_AUTH_EXTRA_ARGUMENTS = {'hd': 'cam.ac.uk'}
 SOCIAL_AUTH_GOOGLE_OAUTH2_WHITELISTED_DOMAINS = ['cam.ac.uk']
 SOCIAL_AUTH_GOOGLE_OAUTH2_WHITELISTED_HOSTED_DOMAINS = ['cam.ac.uk']
@@ -76,7 +79,7 @@ SOCIAL_AUTH_PIPELINE = (
 
 LOGIN_URL = '/accounts/login/google-oauth2/'
 LOGIN_REDIRECT_URL = '/login-complete/google-oauth2/'
-LOGOUT_REDIRECT_URL = 'http://localhost:5173'
+LOGOUT_REDIRECT_URL = 'https://km814.user.srcf.net'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -151,7 +154,8 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_ROOT = '/home/km814/public_html/static'
+STATIC_URL = '/static/'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
@@ -173,8 +177,7 @@ REST_FRAMEWORK = {
     ]
 }
 
-
-CORS_ORIGIN_ALLOW_ALL = True
-CORS_ORIGIN_WHITELIST = ("http://localhost:5173",)
-SOCIAL_AUTH_ALLOWED_REDIRECT_HOSTS = ["http://localhost:5173"]
+CORS_ORIGIN_ALLOW_ALL = False
+CORS_ORIGIN_WHITELIST = ("http://localhost:5173", prod_config.FRONTEND_URI)
+SOCIAL_AUTH_ALLOWED_REDIRECT_HOSTS = ["http://localhost:5173", prod_config.FRONTEND_URI]
 CORS_ALLOW_CREDENTIALS = True
