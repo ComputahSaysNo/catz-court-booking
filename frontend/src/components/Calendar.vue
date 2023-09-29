@@ -117,7 +117,7 @@ interface readQueryType { // Again so typescript will leave me alone :/
 }
 
 
-const {mutate: createBookingMutation, loading: createLoading} = useMutation(CREATE_BOOKING, () => ({
+const {mutate: createBookingMutation} = useMutation(CREATE_BOOKING, () => ({
   update: (cache, createBookingMutation) => {
     let data: readQueryType = cache.readQuery({query: ALL_BOOKINGS})!
     data = {
@@ -149,7 +149,7 @@ function createBooking(): void {
   }, 500)
 }
 
-const {mutate: deleteBookingMutation, loading: deleteLoading} = useMutation(DELETE_BOOKING, () => ({
+const {mutate: deleteBookingMutation} = useMutation(DELETE_BOOKING, () => ({
   update: (cache, deleteBookingMutation) => {
     let data: readQueryType = cache.readQuery({query: ALL_BOOKINGS})!
     data = {
@@ -313,6 +313,7 @@ function getTimeFromOffsetY(offsetY: number, round: number = increment.minutes):
     minutes = 0;
     hourInt++
   }
+  if (hourInt >= 24) {return activeCourtClosingTime.value}
   return new Temporal.PlainTime(hourInt, minutes)
 }
 
@@ -485,7 +486,7 @@ function calendarMouseMove(day: Temporal.PlainDate, e: MouseEvent) {
 let pressTimer: any // timer for setTimeout to detect a long press
 
 function calendarTouchStart(day: Temporal.PlainDate, e: TouchEvent) {
-  if (!currentUser.isAuthenticated) {
+  if (!currentUser.isAuthenticated || newBooking.state==='in-form') {
     return
   } // must be authenticated to create bookings
 
@@ -604,7 +605,7 @@ document.addEventListener('keyup', (e) => {
     <div class="top bg-white mb-2">
 
       <!-- DESKTOP controls section -->
-      <div class="controls container-fluid card bg-light mt-5" v-if="!mobile">
+      <div class="controls container-fluid card bg-light mt-5 mb-5" v-if="!mobile">
 
         <div class="row justify-content-end">
 
@@ -651,7 +652,7 @@ document.addEventListener('keyup', (e) => {
 
       <!-- MOBILE controls section -->
       <div v-else
-           class="container-fluid px-1 py-3 d-flex flex-row justify-content-center align-items-center flex-wrap gap-3">
+           class="container-fluid px-1 pt-3 d-flex flex-row justify-content-center align-items-center flex-wrap gap-3">
         <div class="input-group" style="width: 250px;">
           <span class="input-group-text text-bg-dark">Court: </span>
           <select class="form-select form-control" v-model="activeCourtId">
@@ -681,7 +682,8 @@ document.addEventListener('keyup', (e) => {
 
       <!-- Advance booking notice -->
       <div class="row"
-           v-if="!currentUser.groups.includes('Captain') && !currentUser.groups.includes('Admin') && Temporal.PlainDate.compare(displayedWeek[displayedWeek.length - 1], maxAdvanceDay) >= 0">
+           v-if="currentUser.isAuthenticated && !currentUser.groups.includes('Captain') && !currentUser.groups.includes('Admin')
+           && Temporal.PlainDate.compare(displayedWeek[displayedWeek.length - 1], maxAdvanceDay) >= 0">
         <div class="col text-center text-danger mt-4">
           <i class="bi bi-exclamation-triangle"></i>
           You must be a captain to book more than {{ activeCourt?.maxBookingDaysInAdvance }} days in advance
@@ -689,7 +691,7 @@ document.addEventListener('keyup', (e) => {
       </div>
 
       <!-- Day labels: Mon Tue Wed etc for desktop, M T W etc for mobile -->
-      <div class="dayLabels container-fluid p-0 mt-4">
+      <div class="dayLabels container-fluid p-0 mt-2">
 
         <div class="row g-0">
 
@@ -776,7 +778,7 @@ document.addEventListener('keyup', (e) => {
                     </div>
 
                     <div class="align-self-center" v-if="loading && deleteTarget === booking.id" >
-                      <div class="spinner-border" role="status " style="width: 20px; height: 20px;">
+                      <div class="spinner-border" role="status" style="width: 15px; height: 15px;">
                         <span class="visually-hidden">Loading...</span>
                       </div>
                     </div>
@@ -1059,7 +1061,7 @@ $highlightColor: rgb(255, 56, 96);
   position: fixed;
   bottom: 10px;
   right: 20px;
-  z-index: 60;
+  z-index: 110;
 
   .action {
     border-radius: 50%;
