@@ -28,7 +28,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = prod_config.DJANGO_SECRET
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = [prod_config.FRONTEND_URI, '127.0.0.1']
 
@@ -79,7 +79,7 @@ SOCIAL_AUTH_PIPELINE = (
 
 LOGIN_URL = '/accounts/login/google-oauth2/'
 LOGIN_REDIRECT_URL = '/login-complete/google-oauth2/'
-LOGOUT_REDIRECT_URL = 'https://km814.user.srcf.net'
+LOGOUT_REDIRECT_URL = prod_config.FRONTEND_URI
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
