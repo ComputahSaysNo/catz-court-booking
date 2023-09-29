@@ -83,11 +83,11 @@ const increment = Temporal.Duration.from({hours: 0, minutes: 30})
 // These are executed on component load
 
 // 1. Courts
-const {result: courtQuery} = useQuery(ALL_COURTS)
+const {result: courtQuery} = useQuery(ALL_COURTS, null, {pollInterval: 300000}) // refetch every 5 min
 const allCourts = computed<Court[]>(() => courtQuery.value?.allCourts ?? []) // is [] until the list loads from server
 
 // 2. Bookings
-const {result: bookingsQuery} = useQuery(ALL_BOOKINGS)
+const {result: bookingsQuery , loading: bookingsLoading} = useQuery(ALL_BOOKINGS)
 const allBookings = computed<Booking[]>(() => bookingsQuery.value?.allBookings ?? [])
 
 const displayedBookings = computed<Booking[]>(() => { // bookings on the screen (saves some compute time to have this preloaded)
@@ -100,7 +100,7 @@ const displayedBookings = computed<Booking[]>(() => { // bookings on the screen 
   })
 })
 
-const loading = ref(true)
+const loading = ref(false)
 const deleteTarget = ref<null | number | string>(null)
 watch(allBookings, () => {
   loading.value = false

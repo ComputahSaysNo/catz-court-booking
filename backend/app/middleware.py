@@ -1,6 +1,7 @@
 from rest_framework.authtoken.models import Token
 
 
+# This graphene middleware adds the request's auth token into info.context, if it exists
 class DRFAuthorizationMiddleware(object):
     def __init__(self):
         pass
@@ -15,5 +16,4 @@ class DRFAuthorizationMiddleware(object):
             token = auth_header.split('Token ')[1]
             user = Token.objects.get(key=token).user
             info.context.user = user
-        print("s9")
         return next(root, info, **args)
