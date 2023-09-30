@@ -605,7 +605,7 @@ document.addEventListener('keyup', (e) => {
     <div class="top bg-white mb-2">
 
       <!-- DESKTOP controls section -->
-      <div class="controls container-fluid card bg-light mt-5 mb-5" v-if="!mobile">
+      <div class="controls container-fluid card bg-light mt-4 mb-4" v-if="!mobile">
 
         <div class="row justify-content-end">
 
@@ -652,7 +652,7 @@ document.addEventListener('keyup', (e) => {
 
       <!-- MOBILE controls section -->
       <div v-else
-           class="container-fluid px-1 pt-3 d-flex flex-row justify-content-center align-items-center flex-wrap gap-3">
+           class="container-fluid px-1 mt-3 d-flex flex-row justify-content-around align-items-center flex-wrap gap-1">
         <div class="input-group" style="width: 250px;">
           <span class="input-group-text text-bg-dark">Court: </span>
           <select class="form-select form-control" v-model="activeCourtId">
